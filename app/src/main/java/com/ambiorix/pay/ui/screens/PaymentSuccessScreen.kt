@@ -228,7 +228,7 @@ fun PaymentSuccessScreen(
         contentAlignment = Alignment.Center
     ) {
         val screenHeight = maxHeight
-        val targetTopOffset = -(screenHeight * 0.31f)
+        val targetTopOffset = -(screenHeight * 0.365f)
         val flight = logoFlightProgress.value.coerceIn(0f, 1.2f)
 
         // Capa 1: Esfera verde que nace en el radio exacto del logo central y se expande a toda la pantalla
@@ -284,9 +284,9 @@ fun PaymentSuccessScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.padding(top = 12.dp)
             ) {
-                Spacer(modifier = Modifier.size(124.dp))
+                Spacer(modifier = Modifier.size(138.dp))
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 Text(
                     text = "TRANSACCIÓN CONFIRMADA",

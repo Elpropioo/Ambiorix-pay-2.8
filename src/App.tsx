@@ -1193,7 +1193,7 @@ function PaymentConfirmationChoreographyPreview({
           }}
         >
           {/* Reserved space for the flying hero logo */}
-          <div className="w-24 h-24 mb-2" />
+          <div className="w-28 h-28 mb-3" />
           <span className="text-[11px] uppercase tracking-widest font-bold opacity-90">
             TRANSACCIÓN CONFIRMADA
           </span>
@@ -1249,13 +1249,13 @@ function PaymentConfirmationChoreographyPreview({
 
       {/* HERO 3D SCULPTED AMBIORIX LOGO:
           - In Phase 1 ('bounce'): Centered (y=0), turns emerald green & bounces visibly (scale 1.24)
-          - In Phase 2 ('expand'): Rises smoothly with bounce to top header (y=-182px, scale 0.56) and reveals Checkmark
+          - In Phase 2 ('expand'): Rises smoothly with bounce to top header (y=-285px, scale 0.54) above the title text
           - In Phase 4 ('contract'): Returns smoothly to center */}
       <div
         className="relative z-40 w-48 h-48 rounded-full flex items-center justify-center pointer-events-none"
         style={{
           transform: isExpanded
-            ? 'translateY(-182px) scale(0.56)'
+            ? 'translateY(-285px) scale(0.54)'
             : isBounce
             ? 'translateY(0px) scale(1.24)'
             : 'translateY(0px) scale(0.95)',
