@@ -52,6 +52,8 @@ fun KioskMainScreen(
     scheduleStatusDescription: String,
     dailyTotalAmount: Long = 0L,
     isPaymentConfirmed: Boolean = false,
+    batteryPercentage: Int = 100,
+    isBatteryCharging: Boolean = false,
     onOpenSettingsClick: () -> Unit,
     onRequestNotificationAccess: () -> Unit
 ) {
@@ -59,6 +61,8 @@ fun KioskMainScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val lifecycleState by lifecycleOwner.lifecycle.currentStateAsState()
     val isScreenResumed = lifecycleState.isAtLeast(Lifecycle.State.RESUMED)
+    val isLowBatteryUnplugged = batteryPercentage in 1..20 && !isBatteryCharging
+    val isCriticalBatteryUnplugged = batteryPercentage in 1..5 && !isBatteryCharging
 
     // Animación de pulso continuo para "Esperando pago...", pausada cuando la pantalla no está visible o con reducción de movimiento
     val pulseScale: Float
@@ -150,6 +154,63 @@ fun KioskMainScreen(
                         tint = TextGrayLight,
                         modifier = Modifier.size(22.dp)
                     )
+                }
+            }
+
+            // =========================================================================
+            // 1B. AVISO ROJO PERSISTENTE DE BATERÍA BAJA (<= 20% SIN CARGAR)
+            //     Se mantiene visible hasta que se conecte el cargador.
+            // =========================================================================
+            if (isLowBatteryUnplugged) {
+                Spacer(modifier = Modifier.height(14.dp))
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color(0xFFB91C1C),
+                    border = androidx.compose.foundation.BorderStroke(
+                        width = 2.dp,
+                        color = Color(0xFFFCA5A5).copy(alpha = pulseAlpha)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.18f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = "Batería baja",
+                                tint = Color.White,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Batería baja, por favor conecte el celular",
+                                color = Color.White,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 14.sp
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (isCriticalBatteryUnplugged) {
+                                    "Nivel crítico: $batteryPercentage% · Alerta de voz activa. Conecte el cargador de inmediato."
+                                } else {
+                                    "Nivel actual: $batteryPercentage% · Este aviso desaparecerá al conectar el cargador."
+                                },
+                                color = Color(0xFFFEE2E2),
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
                 }
             }
 
@@ -343,6 +404,7 @@ fun KioskMainScreen(
                 AmbiorixInteractiveLogo(
                     isPaymentConfirmed = isPaymentConfirmed,
                     dailyTotalAmount = dailyTotalAmount,
+                    isLowBatteryWarning = isLowBatteryUnplugged,
                     isServiceOperational = operationalStatus == OperationalStatus.OPERATIONAL,
                     size = 280.dp
                 )

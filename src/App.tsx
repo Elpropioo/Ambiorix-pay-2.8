@@ -505,6 +505,14 @@ const PALETTE_PURPLE = {
   halo: hexToRgb('#A855F7')
 };
 
+const PALETTE_RED = {
+  spec: hexToRgb('#FEF2F2'),
+  bright: hexToRgb('#F87171'),
+  mid: hexToRgb('#DC2626'),
+  deep: hexToRgb('#991B1B'),
+  halo: hexToRgb('#EF4444')
+};
+
 const PALETTE_EMERALD = {
   spec: hexToRgb('#ECFDF5'),
   bright: hexToRgb('#6EE7B7'),
@@ -700,7 +708,8 @@ function drawSculptedAmbiorixCanvas(
   shimmerPhase: number,
   goldTransition: number,
   purpleTransition: number,
-  greenTransition: number
+  greenTransition: number,
+  redTransition: number = 0
 ) {
   ctx.clearRect(0, 0, width, height);
 
@@ -709,25 +718,32 @@ function drawSculptedAmbiorixCanvas(
   const sphereRadius = (Math.min(width, height) / 2) * 0.76;
   const m = Math.max(0, Math.min(1, morphFraction));
 
-  // Interpolate base alloy (Silver <= 300 vs Gold > 300 vs Purple > 600), then override toward Emerald Green on payment confirmation
+  // Interpolate base alloy (Silver <= 300 vs Gold > 300 vs Purple > 600), synchronize with Red on low-battery warning, and override toward Emerald Green on payment confirmation
   const sgSpec = lerpRgb(PALETTE_SILVER.spec, PALETTE_GOLD.spec, goldTransition);
   const sgBright = lerpRgb(PALETTE_SILVER.bright, PALETTE_GOLD.bright, goldTransition);
   const sgMid = lerpRgb(PALETTE_SILVER.mid, PALETTE_GOLD.mid, goldTransition);
   const sgDeep = lerpRgb(PALETTE_SILVER.deep, PALETTE_GOLD.deep, goldTransition);
   const sgHalo = lerpRgb(PALETTE_SILVER.halo, PALETTE_GOLD.halo, goldTransition);
 
-  const baseSpec = lerpRgb(sgSpec, PALETTE_PURPLE.spec, purpleTransition);
-  const baseBright = lerpRgb(sgBright, PALETTE_PURPLE.bright, purpleTransition);
-  const baseMid = lerpRgb(sgMid, PALETTE_PURPLE.mid, purpleTransition);
-  const baseDeep = lerpRgb(sgDeep, PALETTE_PURPLE.deep, purpleTransition);
-  const baseHalo = lerpRgb(sgHalo, PALETTE_PURPLE.halo, purpleTransition);
+  const tierSpec = lerpRgb(sgSpec, PALETTE_PURPLE.spec, purpleTransition);
+  const tierBright = lerpRgb(sgBright, PALETTE_PURPLE.bright, purpleTransition);
+  const tierMid = lerpRgb(sgMid, PALETTE_PURPLE.mid, purpleTransition);
+  const tierDeep = lerpRgb(sgDeep, PALETTE_PURPLE.deep, purpleTransition);
+  const tierHalo = lerpRgb(sgHalo, PALETTE_PURPLE.halo, purpleTransition);
+
+  const baseSpec = lerpRgb(tierSpec, PALETTE_RED.spec, redTransition);
+  const baseBright = lerpRgb(tierBright, PALETTE_RED.bright, redTransition);
+  const baseMid = lerpRgb(tierMid, PALETTE_RED.mid, redTransition);
+  const baseDeep = lerpRgb(tierDeep, PALETTE_RED.deep, redTransition);
+  const baseHalo = lerpRgb(tierHalo, PALETTE_RED.halo, redTransition);
 
   const cSpec = lerpRgb(baseSpec, PALETTE_EMERALD.spec, greenTransition);
   const cBright = lerpRgb(baseBright, PALETTE_EMERALD.bright, greenTransition);
   const cMid = lerpRgb(baseMid, PALETTE_EMERALD.mid, greenTransition);
   const cDeep = lerpRgb(baseDeep, PALETTE_EMERALD.deep, greenTransition);
   const cHalo = lerpRgb(baseHalo, PALETTE_EMERALD.halo, greenTransition);
-  const baseDarkCore = lerpRgb(hexToRgb('#0F172A'), hexToRgb('#1E0B36'), purpleTransition);
+  const tierDarkCore = lerpRgb(hexToRgb('#0F172A'), hexToRgb('#1E0B36'), purpleTransition);
+  const baseDarkCore = lerpRgb(tierDarkCore, hexToRgb('#3B0707'), redTransition);
   const cDarkCore = lerpRgb(baseDarkCore, hexToRgb('#064E3B'), greenTransition);
 
   const tiltX = Math.sin(rotationAngleRad);
@@ -822,7 +838,7 @@ function drawSculptedAmbiorixCanvas(
   addMonogramCutoutsToContext(ctx, cx, cy, sphereRadius, m);
   ctx.clip('evenodd');
 
-  // 5a. 3D Spherical Radial Lighting
+  // 5a. 3D Spherical Radial Lighting (Base Alloy: Silver / Gold / Purple / Red)
   const lightX = cx - sphereRadius * 0.34 + tiltX * sphereRadius * 0.24;
   const lightY = cy - sphereRadius * 0.36 + tiltY * sphereRadius * 0.18;
   const surfaceGrad = ctx.createRadialGradient(
@@ -833,14 +849,28 @@ function drawSculptedAmbiorixCanvas(
     lightY,
     sphereRadius * 1.55
   );
-  surfaceGrad.addColorStop(0, rgbCss(cSpec, 1));
-  surfaceGrad.addColorStop(0.24, rgbCss(cBright, 1));
-  surfaceGrad.addColorStop(0.56, rgbCss(cMid, 1));
-  surfaceGrad.addColorStop(0.84, rgbCss(cDeep, 1));
-  surfaceGrad.addColorStop(1, rgbCss(cDarkCore, 1));
+  surfaceGrad.addColorStop(0, rgbCss(baseSpec, 1));
+  surfaceGrad.addColorStop(0.24, rgbCss(baseBright, 1));
+  surfaceGrad.addColorStop(0.56, rgbCss(baseMid, 1));
+  surfaceGrad.addColorStop(0.84, rgbCss(baseDeep, 1));
+  surfaceGrad.addColorStop(1, rgbCss(baseDarkCore, 1));
 
   ctx.fillStyle = surfaceGrad;
   ctx.fillRect(cx - sphereRadius, cy - sphereRadius, sphereRadius * 2, sphereRadius * 2);
+
+  // If payment is confirmed, Emerald Green is born directly from the center of this same logo
+  // and expands outward across the 3D sculpted columns without superimposing any duplicate logo
+  if (greenTransition > 0.005) {
+    const greenBirthRadius = Math.max(1, sphereRadius * 1.45 * greenTransition);
+    const greenBirthGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, greenBirthRadius);
+    greenBirthGrad.addColorStop(0, rgbCss(PALETTE_EMERALD.spec, 1));
+    greenBirthGrad.addColorStop(0.28, rgbCss(PALETTE_EMERALD.bright, 1));
+    greenBirthGrad.addColorStop(0.65, rgbCss(PALETTE_EMERALD.mid, 1));
+    greenBirthGrad.addColorStop(0.92, rgbCss(PALETTE_EMERALD.deep, 1));
+    greenBirthGrad.addColorStop(1, 'rgba(4,120,87,0)');
+    ctx.fillStyle = greenBirthGrad;
+    ctx.fillRect(cx - sphereRadius, cy - sphereRadius, sphereRadius * 2, sphereRadius * 2);
+  }
 
   // 5b. 3D Rotating Meridians & Latitude Rings integrated into the sculpted surface
   const meridianAlpha = Math.max(0, Math.min(1, (1 - m * 0.78) * 0.46));
@@ -931,11 +961,13 @@ function drawSculptedAmbiorixCanvas(
 function AmbiorixInteractiveLogoPreview({
   isPaymentConfirmed,
   dailyTotalAmount,
+  isLowBatteryWarning = false,
   isOperational,
   isVisible
 }: {
   isPaymentConfirmed: boolean;
   dailyTotalAmount: number;
+  isLowBatteryWarning?: boolean;
   isOperational: boolean;
   isVisible: boolean;
 }) {
@@ -947,6 +979,7 @@ function AmbiorixInteractiveLogoPreview({
     cycleProgress: 0.42,
     goldTransition: isGoldTier || isPurpleTier ? 1 : 0,
     purpleTransition: isPurpleTier ? 1 : 0,
+    redTransition: isLowBatteryWarning ? 1 : 0,
     greenTransition: isPaymentConfirmed ? 1 : 0
   });
 
@@ -996,6 +1029,7 @@ function AmbiorixInteractiveLogoPreview({
 
       const targetGold = isGoldTier || isPurpleTier ? 1 : 0;
       const targetPurple = isPurpleTier ? 1 : 0;
+      const targetRed = isLowBatteryWarning ? 1 : 0;
       const targetGreen = isPaymentConfirmed ? 1 : 0;
 
       // Smoothly interpolate alloy state
@@ -1010,6 +1044,13 @@ function AmbiorixInteractiveLogoPreview({
         state.purpleTransition = Math.min(targetPurple, state.purpleTransition + alloySpeed);
       } else if (state.purpleTransition > targetPurple) {
         state.purpleTransition = Math.max(targetPurple, state.purpleTransition - alloySpeed);
+      }
+
+      const redSpeed = delta / 260;
+      if (state.redTransition < targetRed) {
+        state.redTransition = Math.min(targetRed, state.redTransition + redSpeed);
+      } else if (state.redTransition > targetRed) {
+        state.redTransition = Math.max(targetRed, state.redTransition - redSpeed);
       }
 
       const greenSpeed = delta / 220;
@@ -1035,7 +1076,8 @@ function AmbiorixInteractiveLogoPreview({
         shimmerPhase,
         state.goldTransition,
         state.purpleTransition,
-        state.greenTransition
+        state.greenTransition,
+        state.redTransition
       );
       ctx.restore();
 
@@ -1044,6 +1086,7 @@ function AmbiorixInteractiveLogoPreview({
         (isOperational ||
           Math.abs(state.goldTransition - targetGold) > 0.01 ||
           Math.abs(state.purpleTransition - targetPurple) > 0.01 ||
+          Math.abs(state.redTransition - targetRed) > 0.01 ||
           Math.abs(state.greenTransition - targetGreen) > 0.01)
       ) {
         rafId = requestAnimationFrame(renderFrame);
@@ -1052,14 +1095,14 @@ function AmbiorixInteractiveLogoPreview({
 
     rafId = requestAnimationFrame(renderFrame);
     return () => cancelAnimationFrame(rafId);
-  }, [isVisible, isOperational, isGoldTier, isPurpleTier, isPaymentConfirmed]);
+  }, [isVisible, isOperational, isGoldTier, isPurpleTier, isLowBatteryWarning, isPaymentConfirmed]);
 
   return (
     <div className="relative w-60 h-60 flex flex-col items-center justify-center select-none">
       <canvas
         ref={canvasRef}
         style={{ width: 240, height: 240 }}
-        className={`transition-transform duration-200 ${
+        className={`transition-transform duration-300 ${
           isPaymentConfirmed ? 'scale-110' : 'scale-100'
         }`}
       />
@@ -1069,28 +1112,24 @@ function AmbiorixInteractiveLogoPreview({
 
 function PaymentConfirmationChoreographyPreview({
   payment,
-  dailyTotalAmount,
   timeRemaining,
   confirmationDuration
 }: {
   payment: PaymentRecord;
-  dailyTotalAmount: number;
+  dailyTotalAmount?: number;
   timeRemaining: number;
   confirmationDuration: number;
 }) {
-  // Stage 1: 'bounce' (0..460ms) -> Sculpted 3D Logo in center turns emerald green & bounces with shockwaves
-  // Stage 2: 'expand' (460ms..end-400ms) -> Green sphere expands radially from logo & sculpted 3D logo flies to top badge
-  // Stage 3: 'contract' (last 400ms) -> Green sphere & sculpted 3D logo contract back to center
+  // Stage 1: 'bounce' (0..420ms) -> The single central logo on KioskMainScreen turns emerald green from within itself (no duplicate logo superimposed)
+  // Stage 2: 'expand' (420ms..end-380ms) -> Green confirmation screen expands radially from the center of that same logo
+  // Stage 3: 'contract' (last 380ms) -> Green confirmation screen contracts back into the center of that same logo
   const [stage, setStage] = useState<'bounce' | 'expand' | 'contract'>('bounce');
-  const heroCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const isPurpleTier = isAmbiorixPurpleTier(dailyTotalAmount);
-  const isGoldTier = isAmbiorixGoldTier(dailyTotalAmount);
 
   useEffect(() => {
     setStage('bounce');
     const expandTimer = setTimeout(() => {
       setStage('expand');
-    }, 460);
+    }, 420);
 
     const totalMs = Math.max(2000, confirmationDuration * 1000);
     const contractTimer = setTimeout(() => {
@@ -1103,58 +1142,12 @@ function PaymentConfirmationChoreographyPreview({
     };
   }, [payment.id, confirmationDuration]);
 
-  // Render the 3D sculpted green Ambiorix monogram on the flying hero canvas
-  useEffect(() => {
-    const canvas = heroCanvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
-    const size = 190;
-    if (canvas.width !== size * dpr || canvas.height !== size * dpr) {
-      canvas.width = size * dpr;
-      canvas.height = size * dpr;
-    }
-
-    let rafId = 0;
-    const startTime = performance.now();
-
-    const tick = (now: number) => {
-      const elapsed = now - startTime;
-      // Fast transition from current Silver/Gold/Purple alloy (0..180ms) into radiant Emerald Green
-      const greenT = Math.min(1, elapsed / 180);
-      const shimmerPhase = ((elapsed / 1600) % 1);
-      const subtleAngle = Math.sin(elapsed / 500) * 0.22;
-
-      ctx.save();
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      drawSculptedAmbiorixCanvas(
-        ctx,
-        size,
-        size,
-        1.0, // Sculpted into the 3D Ambiorix "AAA" monogram
-        subtleAngle,
-        shimmerPhase,
-        isGoldTier || isPurpleTier ? 1 : 0,
-        isPurpleTier ? 1 : 0,
-        greenT
-      );
-      ctx.restore();
-
-      rafId = requestAnimationFrame(tick);
-    };
-
-    rafId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafId);
-  }, [payment.id, isGoldTier, isPurpleTier]);
-
   const isExpanded = stage === 'expand';
   const isBounce = stage === 'bounce';
 
   return (
     <div className="absolute inset-0 z-30 pointer-events-auto overflow-hidden flex items-center justify-center">
-      {/* Phase 1 Shockwaves radiating from the central green sculpted 3D logo */}
+      {/* Phase 1 Shockwaves radiating from the single central green logo */}
       <div
         className="absolute w-48 h-48 rounded-full border-4 border-emerald-300 pointer-events-none transition-all duration-500 ease-out"
         style={{
@@ -1170,30 +1163,29 @@ function PaymentConfirmationChoreographyPreview({
         }}
       />
 
-      {/* Radial Emerald Green Sphere expanding from the center logo to cover the full screen */}
+      {/* Radial Emerald Green Screen born directly from the center of the same logo (without superimposing another logo on top) */}
       <div
         className="absolute inset-0 bg-gradient-to-b from-emerald-500 via-emerald-600 to-emerald-700 text-white flex flex-col justify-between p-6"
         style={{
           clipPath: isExpanded
             ? 'circle(145% at 50% 50%)'
-            : isBounce
-            ? 'circle(0% at 50% 50%)'
-            : 'circle(16% at 50% 50%)',
+            : 'circle(0% at 50% 50%)',
           transition: isExpanded
-            ? 'clip-path 520ms cubic-bezier(0.22, 1.18, 0.36, 1)'
-            : 'clip-path 360ms cubic-bezier(0.4, 0, 0.2, 1)'
+            ? 'clip-path 500ms cubic-bezier(0.22, 1.18, 0.36, 1)'
+            : 'clip-path 340ms cubic-bezier(0.4, 0, 0.2, 1)'
         }}
       >
-        {/* Top Header Space (where the flying sculpted 3D Ambiorix logo lands) */}
+        {/* Top Header Confirmation Badge */}
         <div
-          className="flex flex-col items-center pt-4 transition-all duration-300"
+          className="flex flex-col items-center pt-5 transition-all duration-300"
           style={{
             opacity: isExpanded ? 1 : 0,
             transform: isExpanded ? 'translateY(0) scale(1)' : 'translateY(12px) scale(0.92)'
           }}
         >
-          {/* Reserved space for the flying hero logo */}
-          <div className="w-28 h-28 mb-3" />
+          <div className="w-20 h-20 mb-3 rounded-full bg-emerald-700/90 border-[3px] border-white flex items-center justify-center shadow-lg">
+            <CheckCircle2 className="w-11 h-11 text-white stroke-[2.8]" />
+          </div>
           <span className="text-[11px] uppercase tracking-widest font-bold opacity-90">
             TRANSACCIÓN CONFIRMADA
           </span>
@@ -1244,43 +1236,6 @@ function PaymentConfirmationChoreographyPreview({
           <span className="text-[11px] opacity-85 mt-1.5">
             Volviendo a espera activa ({timeRemaining}s)...
           </span>
-        </div>
-      </div>
-
-      {/* HERO 3D SCULPTED AMBIORIX LOGO:
-          - In Phase 1 ('bounce'): Centered (y=0), turns emerald green & bounces visibly (scale 1.24)
-          - In Phase 2 ('expand'): Rises smoothly with bounce to top header (y=-285px, scale 0.54) above the title text
-          - In Phase 4 ('contract'): Returns smoothly to center */}
-      <div
-        className="relative z-40 w-48 h-48 rounded-full flex items-center justify-center pointer-events-none"
-        style={{
-          transform: isExpanded
-            ? 'translateY(-285px) scale(0.54)'
-            : isBounce
-            ? 'translateY(0px) scale(1.24)'
-            : 'translateY(0px) scale(0.95)',
-          transition: isExpanded
-            ? 'transform 520ms cubic-bezier(0.22, 1.26, 0.36, 1)'
-            : 'transform 340ms cubic-bezier(0.34, 1.56, 0.64, 1)'
-        }}
-      >
-        <canvas
-          ref={heroCanvasRef}
-          style={{ width: 190, height: 190 }}
-          className="drop-shadow-[0_0_28px_rgba(16,185,129,0.9)]"
-        />
-
-        {/* Checkmark badge emerging over the sculpted 3D Ambiorix logo once expanded */}
-        <div
-          className="absolute inset-0 flex items-center justify-center transition-all duration-300"
-          style={{
-            transform: isExpanded ? 'scale(1)' : 'scale(0)',
-            opacity: isExpanded ? 1 : 0
-          }}
-        >
-          <div className="w-16 h-16 rounded-full bg-emerald-700/90 border-2 border-white flex items-center justify-center shadow-lg">
-            <CheckCircle2 className="w-10 h-10 text-white stroke-[2.8]" />
-          </div>
         </div>
       </div>
     </div>
@@ -1605,6 +1560,32 @@ export default function App() {
   const [simPackage, setSimPackage] = useState('com.nequi.MobileApp');
 
   const [isSpeaking, setIsSpeaking] = useState(false);
+
+  // Battery level & charging state (<= 20% unplugged shows persistent red warning; <= 5% unplugged speaks warning)
+  const [batteryPercentage, setBatteryPercentage] = useState<number>(100);
+  const [isBatteryCharging, setIsBatteryCharging] = useState<boolean>(false);
+  const isLowBatteryUnplugged = batteryPercentage >= 1 && batteryPercentage <= 20 && !isBatteryCharging;
+  const isCriticalBatteryUnplugged = batteryPercentage >= 1 && batteryPercentage <= 5 && !isBatteryCharging;
+
+  // When battery <= 5% and not charging, speak "Batería baja, por favor conéctame a cargar"
+  useEffect(() => {
+    if (!isCriticalBatteryUnplugged) {
+      return;
+    }
+    const announceLowBattery = () => {
+      playChimeSound();
+      setTimeout(() => {
+        speakSpanishPhrase(
+          'Batería baja, por favor conéctame a cargar',
+          () => setIsSpeaking(true),
+          () => setIsSpeaking(false)
+        );
+      }, 220);
+    };
+    announceLowBattery();
+    const interval = setInterval(announceLowBattery, 45000);
+    return () => clearInterval(interval);
+  }, [isCriticalBatteryUnplugged]);
 
   // Pre-load browser voices
   useEffect(() => {
@@ -2106,6 +2087,25 @@ export default function App() {
                       </div>
                     </div>
 
+                    {/* AVISO ROJO PERSISTENTE DE BATERÍA BAJA (<= 20% SIN CARGAR) */}
+                    {isLowBatteryUnplugged && (
+                      <div className="mt-3 p-3 rounded-2xl bg-red-700 border-2 border-red-300 shadow-lg shadow-red-900/50 flex items-center space-x-3 animate-pulse">
+                        <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                          <AlertTriangle className="w-5 h-5 text-white" />
+                        </div>
+                        <div className="text-left leading-tight">
+                          <p className="text-xs font-extrabold text-white">
+                            Batería baja, por favor conecte el celular
+                          </p>
+                          <p className="text-[10px] font-semibold text-red-100 mt-0.5">
+                            {isCriticalBatteryUnplugged
+                              ? `Nivel crítico: ${batteryPercentage}% · Alerta de voz activa ("Batería baja, por favor conéctame a cargar")`
+                              : `Nivel actual: ${batteryPercentage}% · Se quitará al conectar el cargador`}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
                     {operationalStatus === 'DISABLED' && (
                       <div
                         onClick={() => setShowPinModal(true)}
@@ -2166,6 +2166,7 @@ export default function App() {
                     <AmbiorixInteractiveLogoPreview
                       isPaymentConfirmed={currentPayment !== null}
                       dailyTotalAmount={todayTotalAmount}
+                      isLowBatteryWarning={isLowBatteryUnplugged}
                       isOperational={operationalStatus === 'OPERATIONAL'}
                       isVisible={isPageVisible && activeTab === 'kiosk'}
                     />
@@ -3233,6 +3234,103 @@ export default function App() {
                 <span>Simular Recepción de Notificación Push</span>
               </button>
             </div>
+          </div>
+
+          {/* SIMULADOR DE BATERÍA BAJA (20% AVISO ROJO / 5% VOZ) */}
+          <div className="bg-[#0B0F17] border border-slate-800 rounded-3xl p-5 shadow-xl space-y-3.5">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center space-x-2.5">
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center border ${
+                  isLowBatteryUnplugged
+                    ? 'bg-red-500/20 text-red-400 border-red-500/40'
+                    : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
+                }`}>
+                  <AlertTriangle className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Detector de Batería (20% Aviso / 5% Voz)</h3>
+                  <p className="text-[11px] text-slate-400">
+                    Batería: <strong className="text-white">{batteryPercentage}%</strong> · Estado:{' '}
+                    <strong className={isBatteryCharging ? 'text-emerald-400' : 'text-amber-400'}>
+                      {isBatteryCharging ? 'Cargando (Conectado)' : 'Descargando (Sin cable)'}
+                    </strong>
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setBatteryPercentage(100);
+                  setIsBatteryCharging(false);
+                }}
+                className={`px-2.5 py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                  batteryPercentage > 20 && !isBatteryCharging
+                    ? 'bg-slate-800 text-white border-slate-400'
+                    : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
+                }`}
+              >
+                100% Normal
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setBatteryPercentage(20);
+                  setIsBatteryCharging(false);
+                  setActiveTab('kiosk');
+                }}
+                className={`px-2.5 py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                  batteryPercentage === 20 && !isBatteryCharging
+                    ? 'bg-red-900/70 text-red-100 border-red-400'
+                    : 'bg-slate-900 text-red-300 border-red-900/60 hover:bg-red-950/50'
+                }`}
+              >
+                20% (Aviso Rojo)
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setBatteryPercentage(5);
+                  setIsBatteryCharging(false);
+                  setActiveTab('kiosk');
+                }}
+                className={`px-2.5 py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                  batteryPercentage <= 5 && !isBatteryCharging
+                    ? 'bg-red-700 text-white border-red-300'
+                    : 'bg-slate-900 text-rose-300 border-rose-900/60 hover:bg-rose-950/50'
+                }`}
+              >
+                5% (Aviso + Voz)
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                const nextCharging = !isBatteryCharging;
+                setIsBatteryCharging(nextCharging);
+                if (nextCharging && 'speechSynthesis' in window) {
+                  window.speechSynthesis.cancel();
+                  setIsSpeaking(false);
+                }
+              }}
+              className={`w-full py-2.5 rounded-xl font-extrabold text-xs flex items-center justify-center space-x-2 transition border cursor-pointer ${
+                isBatteryCharging
+                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400'
+                  : 'bg-slate-900 hover:bg-slate-800 text-emerald-400 border-emerald-500/40'
+              }`}
+            >
+              <Power className="w-3.5 h-3.5" />
+              <span>
+                {isBatteryCharging
+                  ? 'Cargador Conectado (Aviso oculto · Toca para desconectar)'
+                  : 'Conectar el Celular al Cargador (Quitar Aviso Rojo)'}
+              </span>
+            </button>
           </div>
 
           {/* PROJECT ARTIFACTS AND CODE LIST */}

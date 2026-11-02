@@ -336,6 +336,37 @@ class SoundAnnouncer private constructor(context: Context) : TextToSpeech.OnInit
     }
 
     /**
+     * Emite una alerta hablada cuando la batería llega al 5% o menos sin estar conectada al cargador:
+     * "Batería baja, por favor conéctame a cargar"
+     */
+    fun speakLowBatteryWarning() {
+        val phrase = "Batería baja, por favor conéctame a cargar"
+        try {
+            if (toneGenerator == null) {
+                initToneGenerator()
+            }
+            toneGenerator?.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 350)
+        } catch (e: Exception) {
+            Log.w(TAG, "Fallo al reproducir tono de batería baja: ${e.message}")
+        }
+
+        // Evitar duplicar la misma frase de batería en la cola si ya está pendiente
+        if (!speechQueue.contains(phrase)) {
+            Log.d(TAG, "Encolando alerta de batería crítica (<= 5%): \"$phrase\"")
+            speechQueue.offer(phrase)
+            processNextInQueue()
+        }
+    }
+
+    /**
+     * Remueve avisos pendientes de batería baja cuando el usuario conecta el cargador.
+     */
+    fun cancelLowBatteryWarning() {
+        val phrase = "Batería baja, por favor conéctame a cargar"
+        speechQueue.removeAll(setOf(phrase))
+    }
+
+    /**
      * Detiene la síntesis de voz actual y limpia la cola de locuciones pendientes.
      */
     fun stop() {

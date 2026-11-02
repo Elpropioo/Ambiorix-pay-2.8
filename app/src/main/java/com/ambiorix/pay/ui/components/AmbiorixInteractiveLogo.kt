@@ -76,7 +76,14 @@ private val PurpleMid = Color(0xFF9333EA)
 private val PurpleDeep = Color(0xFF581C87)
 private val PurpleShadow = Color(0xFF1E0B36)
 
-// 4. Aleación Verde Esmeralda (Cuando se verifica un pago entrante)
+// 4. Aleación Roja Rubí / Carmesí (Sincronizada cuando está activo el aviso de batería baja <= 20%)
+private val RedSpecular = Color(0xFFFEF2F2)
+private val RedBright = Color(0xFFF87171)
+private val RedMid = Color(0xFFDC2626)
+private val RedDeep = Color(0xFF991B1B)
+private val RedShadow = Color(0xFF3B0707)
+
+// 5. Aleación Verde Esmeralda (Cuando se verifica un pago entrante)
 private val EmeraldSpecular = Color(0xFFECFDF5)
 private val EmeraldBright = Color(0xFF6EE7B7)
 private val EmeraldMid = Color(0xFF10B981)
@@ -124,6 +131,10 @@ class LogoGeometryCache {
  *   - De 300 ($300.000 COP) para abajo: **Plateado / Platino**.
  *   - Más de 300 hasta 600 ($300.001 a $600.000 COP): **Dorado 24K**.
  *   - Más de 600 (> $600.000 COP): **Morado Amatista Metálico**.
+ * - Sincronización de Batería Baja (`isLowBatteryWarning = true`):
+ *   - Mientras esté activo el aviso rojo de batería baja (<= 20% sin cargador), el logo animado
+ *     se sincroniza y se pone en **Rojo Metálico Carmesí** igual que el aviso, regresando a su
+ *     color normal apenas se conecte el cargador.
  * - Verificación de pago (`isPaymentConfirmed = true`):
  *   Sin importar el nivel actual, al confirmar un pago cambia rápidamente a
  *   **Verde Esmeralda**, rebota con energía y da paso a la expansión de pantalla verde.
@@ -132,6 +143,7 @@ class LogoGeometryCache {
 fun AmbiorixInteractiveLogo(
     isPaymentConfirmed: Boolean,
     dailyTotalAmount: Long = 0L,
+    isLowBatteryWarning: Boolean = false,
     isServiceOperational: Boolean = true,
     size: Dp = 276.dp,
     modifier: Modifier = Modifier
@@ -147,9 +159,10 @@ fun AmbiorixInteractiveLogo(
     // Fase continua [0f..1f)
     var cycleProgress by remember { mutableFloatStateOf(0.35f) }
 
-    // Transiciones suaves entre Plateado (0f), Dorado (>300) y Morado (>600)
+    // Transiciones suaves entre Plateado (0f), Dorado (>300), Morado (>600) y Rojo (Aviso de batería baja)
     val goldTransition = remember { Animatable(if (isGoldTarget || isPurpleTarget) 1f else 0f) }
     val purpleTransition = remember { Animatable(if (isPurpleTarget) 1f else 0f) }
+    val redTransition = remember { Animatable(if (isLowBatteryWarning) 1f else 0f) }
 
     // Transición reactiva al evento real de pago confirmado (0f = metal normal, 1f = verde confirmación)
     val greenTransition = remember { Animatable(0f) }
@@ -175,6 +188,16 @@ fun AmbiorixInteractiveLogo(
                 )
             )
         }
+    }
+
+    LaunchedEffect(isLowBatteryWarning, reducedMotion) {
+        redTransition.animateTo(
+            targetValue = if (isLowBatteryWarning) 1f else 0f,
+            animationSpec = tween(
+                durationMillis = if (reducedMotion) 120 else 360,
+                easing = FastOutSlowInEasing
+            )
+        )
     }
 
     LaunchedEffect(isPaymentConfirmed, reducedMotion) {
@@ -267,6 +290,7 @@ fun AmbiorixInteractiveLogo(
     val rotationRadians = (cycleProgress * 2.0 * PI).toFloat()
     val goldFactor = goldTransition.value
     val purpleFactor = purpleTransition.value
+    val redFactor = redTransition.value
     val greenFactor = greenTransition.value
     val bounceScale = confirmationBounceScale.value
     val wave = shockwaveProgress.value
@@ -299,6 +323,7 @@ fun AmbiorixInteractiveLogo(
                 rotationRadians = rotationRadians,
                 goldFactor = goldFactor,
                 purpleFactor = purpleFactor,
+                redFactor = redFactor,
                 greenFactor = greenFactor,
                 shockwave = wave
             )
@@ -316,6 +341,7 @@ fun DrawScope.drawSculptedAmbiorixSphereLogo(
     rotationRadians: Float,
     goldFactor: Float,
     purpleFactor: Float = 0f,
+    redFactor: Float = 0f,
     greenFactor: Float = 0f,
     shockwave: Float = 0f
 ) {
@@ -325,18 +351,24 @@ fun DrawScope.drawSculptedAmbiorixSphereLogo(
     val center = Offset(canvasW * 0.5f, canvasH * 0.5f)
     val sphereRadius = minDim * 0.37f
 
-    // 1. Interpolar paleta activa: Plateado (<=300) <-> Dorado (>300) <-> Morado (>600) <-> Verde Esmeralda (Confirmado)
+    // 1. Interpolar paleta activa: Plateado (<=300) <-> Dorado (>300) <-> Morado (>600) <-> Rojo (Batería baja) <-> Verde Esmeralda (Confirmado)
     val goldOrSilverSpec = lerpColor(SilverSpecular, GoldSpecular, goldFactor)
     val goldOrSilverBright = lerpColor(SilverBright, GoldBright, goldFactor)
     val goldOrSilverMid = lerpColor(SilverMid, GoldMid, goldFactor)
     val goldOrSilverDeep = lerpColor(SilverDeep, GoldDeep, goldFactor)
     val goldOrSilverShadow = lerpColor(SilverShadow, GoldShadow, goldFactor)
 
-    val baseSpecular = lerpColor(goldOrSilverSpec, PurpleSpecular, purpleFactor)
-    val baseBright = lerpColor(goldOrSilverBright, PurpleBright, purpleFactor)
-    val baseMid = lerpColor(goldOrSilverMid, PurpleMid, purpleFactor)
-    val baseDeep = lerpColor(goldOrSilverDeep, PurpleDeep, purpleFactor)
-    val baseShadow = lerpColor(goldOrSilverShadow, PurpleShadow, purpleFactor)
+    val tierSpecular = lerpColor(goldOrSilverSpec, PurpleSpecular, purpleFactor)
+    val tierBright = lerpColor(goldOrSilverBright, PurpleBright, purpleFactor)
+    val tierMid = lerpColor(goldOrSilverMid, PurpleMid, purpleFactor)
+    val tierDeep = lerpColor(goldOrSilverDeep, PurpleDeep, purpleFactor)
+    val tierShadow = lerpColor(goldOrSilverShadow, PurpleShadow, purpleFactor)
+
+    val baseSpecular = lerpColor(tierSpecular, RedSpecular, redFactor)
+    val baseBright = lerpColor(tierBright, RedBright, redFactor)
+    val baseMid = lerpColor(tierMid, RedMid, redFactor)
+    val baseDeep = lerpColor(tierDeep, RedDeep, redFactor)
+    val baseShadow = lerpColor(tierShadow, RedShadow, redFactor)
 
     val activeSpecular = lerpColor(baseSpecular, EmeraldSpecular, greenFactor)
     val activeBright = lerpColor(baseBright, EmeraldBright, greenFactor)
@@ -348,14 +380,14 @@ fun DrawScope.drawSculptedAmbiorixSphereLogo(
     drawCircle(
         brush = Brush.radialGradient(
             colors = listOf(
-                activeBright.copy(alpha = 0.24f + 0.26f * greenFactor),
-                activeMid.copy(alpha = 0.14f + 0.22f * greenFactor),
+                activeBright.copy(alpha = 0.24f + 0.14f * redFactor + 0.26f * greenFactor),
+                activeMid.copy(alpha = 0.14f + 0.10f * redFactor + 0.22f * greenFactor),
                 Color.Transparent
             ),
             center = center,
-            radius = sphereRadius * (1.38f + 0.24f * greenFactor)
+            radius = sphereRadius * (1.38f + 0.10f * redFactor + 0.24f * greenFactor)
         ),
-        radius = sphereRadius * (1.38f + 0.24f * greenFactor),
+        radius = sphereRadius * (1.38f + 0.10f * redFactor + 0.24f * greenFactor),
         center = center
     )
 
@@ -440,20 +472,39 @@ fun DrawScope.drawSculptedAmbiorixSphereLogo(
     val lightOffsetY = center.y - sphereRadius * 0.34f * sin(rotationRadians.toDouble()).toFloat()
 
     clipPath(cache.morphMaskPath) {
-        // Sombreado esférico 3D principal (Plateado, Dorado o Verde Esmeralda)
+        // Sombreado esférico 3D base (Plateado, Dorado, Morado o Rojo)
         drawCircle(
             brush = Brush.radialGradient(
-                0.00f to activeSpecular,
-                0.22f to activeBright,
-                0.56f to activeMid,
-                0.84f to activeDeep,
-                1.00f to activeShadow,
+                0.00f to baseSpecular,
+                0.22f to baseBright,
+                0.56f to baseMid,
+                0.84f to baseDeep,
+                1.00f to baseShadow,
                 center = Offset(lightOffsetX, lightOffsetY),
                 radius = sphereRadius * 1.38f
             ),
             radius = sphereRadius,
             center = center
         )
+
+        // Si hay confirmación de pago, el color Verde Esmeralda nace desde el centro del mismo logo
+        // y se expande radialmente por toda su estructura 3D sin superponer otro logo encima
+        if (greenFactor > 0.005f) {
+            val greenBirthRadius = (sphereRadius * 1.45f * greenFactor).coerceAtLeast(1f)
+            drawCircle(
+                brush = Brush.radialGradient(
+                    0.00f to EmeraldSpecular,
+                    0.28f to EmeraldBright,
+                    0.65f to EmeraldMid,
+                    0.92f to EmeraldDeep,
+                    1.00f to Color.Transparent,
+                    center = center,
+                    radius = greenBirthRadius
+                ),
+                radius = sphereRadius,
+                center = center
+            )
+        }
 
         // Contra-luz especular inferior para dar volumen metálico líquido
         val rimLightX = center.x + sphereRadius * 0.45f * cos(rotationRadians.toDouble()).toFloat()

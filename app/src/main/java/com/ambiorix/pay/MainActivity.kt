@@ -1,8 +1,12 @@
 package com.ambiorix.pay
 
 import android.Manifest
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -39,6 +43,7 @@ import com.ambiorix.pay.ui.components.PinDialog
 import com.ambiorix.pay.ui.screens.KioskMainScreen
 import com.ambiorix.pay.ui.screens.PaymentSuccessScreen
 import com.ambiorix.pay.ui.theme.AmbiorixPayTheme
+import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
 
@@ -69,6 +74,71 @@ class MainActivity : ComponentActivity() {
                 var showPinDialog by remember { mutableStateOf(false) }
                 var isNotificationAccessGranted by remember { mutableStateOf(checkNotificationAccess()) }
                 var isSmsPermissionGranted by remember { mutableStateOf(checkSmsPermission()) }
+                var batteryPercentage by remember { mutableIntStateOf(100) }
+                var isBatteryCharging by remember { mutableStateOf(false) }
+
+                // Monitoreo en tiempo real del nivel de batería y conexión al cargador
+                DisposableEffect(Unit) {
+                    fun updateBatteryFromIntent(intent: Intent?) {
+                        if (intent == null) return
+                        val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+                        val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+                        if (level >= 0 && scale > 0) {
+                            batteryPercentage = ((level * 100f) / scale.toFloat()).toInt().coerceIn(0, 100)
+                        }
+                        when (intent.action) {
+                            Intent.ACTION_POWER_CONNECTED -> {
+                                isBatteryCharging = true
+                            }
+                            Intent.ACTION_POWER_DISCONNECTED -> {
+                                isBatteryCharging = false
+                            }
+                            else -> {
+                                val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
+                                val plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0)
+                                isBatteryCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                                    status == BatteryManager.BATTERY_STATUS_FULL ||
+                                    plugged != 0
+                            }
+                        }
+                    }
+
+                    val batteryReceiver = object : BroadcastReceiver() {
+                        override fun onReceive(context: Context?, intent: Intent?) {
+                            updateBatteryFromIntent(intent)
+                        }
+                    }
+
+                    val filter = IntentFilter().apply {
+                        addAction(Intent.ACTION_BATTERY_CHANGED)
+                        addAction(Intent.ACTION_POWER_CONNECTED)
+                        addAction(Intent.ACTION_POWER_DISCONNECTED)
+                    }
+
+                    val initialStickyIntent = registerReceiver(batteryReceiver, filter)
+                    updateBatteryFromIntent(initialStickyIntent)
+
+                    onDispose {
+                        try {
+                            unregisterReceiver(batteryReceiver)
+                        } catch (_: Exception) {
+                        }
+                    }
+                }
+
+                // Alerta de voz cuando la batería está en <= 5% y NO está cargando:
+                // "Batería baja, por favor conéctame a cargar"
+                val isCriticalBatteryUnplugged = batteryPercentage in 1..5 && !isBatteryCharging
+                LaunchedEffect(isCriticalBatteryUnplugged, isBatteryCharging) {
+                    if (isBatteryCharging || batteryPercentage > 5) {
+                        soundAnnouncer.cancelLowBatteryWarning()
+                    } else if (isCriticalBatteryUnplugged) {
+                        while (true) {
+                            soundAnnouncer.speakLowBatteryWarning()
+                            delay(45_000L)
+                        }
+                    }
+                }
 
                 val smsPermissionLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -186,6 +256,8 @@ class MainActivity : ComponentActivity() {
                         scheduleStatusDescription = scheduleDescription,
                         dailyTotalAmount = todayTotalAmount,
                         isPaymentConfirmed = currentPayment != null,
+                        batteryPercentage = batteryPercentage,
+                        isBatteryCharging = isBatteryCharging,
                         onOpenSettingsClick = { showPinDialog = true },
                         onRequestNotificationAccess = { openNotificationSettings() }
                     )
