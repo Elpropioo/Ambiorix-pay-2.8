@@ -59,7 +59,7 @@ export async function triggerClientSideZipDownload() {
       platform: 'UNIX'
     });
 
-    saveAs(blob, 'AmbiorixPay-v2.7-GT-Android-Project.zip');
+    saveAs(blob, 'AmbiorixPay-v2.8-GT-Android-Project.zip');
     return true;
   } catch (err) {
     console.error('Error generating client-side zip:', err);
@@ -67,7 +67,7 @@ export async function triggerClientSideZipDownload() {
       const res = await fetch('/AmbiorixPOS-Android-Project.zip');
       if (res.ok) {
         const blob = await res.blob();
-        saveAs(blob, 'AmbiorixPay-v2.7-GT-Android-Project.zip');
+        saveAs(blob, 'AmbiorixPay-v2.8-GT-Android-Project.zip');
         return true;
       }
     } catch (e) {

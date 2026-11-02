@@ -1,6 +1,6 @@
-# Ambiorix Pay 2.7 GT 📱🇨🇴
+# Ambiorix Pay 2.8 GT 📱🇨🇴
 
-**Ambiorix Pay (Versión 2.7)** es una pantalla inteligente para comercios en Colombia que reciben pagos por transferencia y códigos QR (Nequi, Bancolombia, Daviplata, Dale!, Movii, etc.).
+**Ambiorix Pay (Versión 2.8)** es una pantalla inteligente para comercios en Colombia que reciben pagos por transferencia y códigos QR (Nequi, Bancolombia, Daviplata, Dale!, Movii, etc.).
 
 > **AVISO IMPORTANTE DE SEGURIDAD Y ARQUITECTURA:**  
 > Ambiorix Pay **NO** procesa pagos, **NO** mueve dinero, **NO** se conecta a las APIs bancarias y **NO TIENE EL PERMISO DE INTERNET** (`android.permission.INTERNET`). El dinero llega directo a la cuenta bancaria del comerciante. La app únicamente escucha las notificaciones del sistema de forma 100% local, extrae el monto en COP y muestra una pantalla verde de confirmación con voz y sonido para que el comerciante y el cliente verifiquen la transacción desde varios metros de distancia.

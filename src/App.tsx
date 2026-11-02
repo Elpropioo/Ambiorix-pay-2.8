@@ -1900,7 +1900,7 @@ export default function App() {
     {
       name: 'SettingsScreen.kt',
       path: '/app/src/main/java/com/ambiorix/pay/ui/screens/SettingsScreen.kt',
-      desc: 'Configuración completa con pie de página Versión 2.7, Creado por El.propiooo y elemento luminoso 888.'
+      desc: 'Configuración completa con pie de página Versión 2.8, Creado por El.propiooo y elemento luminoso 888.'
     },
     {
       name: 'Payment.kt & PaymentRepository.kt',
@@ -1920,7 +1920,7 @@ export default function App() {
     {
       name: 'build-apk.yml',
       path: '/.github/workflows/build-apk.yml',
-      desc: 'Flujo de GitHub Actions con Temurin JDK 17 y Gradle 8.9 listo para compilar APK de Ambiorix Pay 2.7 GT.'
+      desc: 'Flujo de GitHub Actions con Temurin JDK 17 y Gradle 8.9 listo para compilar APK de Ambiorix Pay 2.8 GT.'
     }
   ];
 
@@ -1939,7 +1939,7 @@ export default function App() {
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <h1 className="font-extrabold text-base tracking-wide text-white">AMBIORIX PAY 2.7 GT</h1>
+                <h1 className="font-extrabold text-base tracking-wide text-white">AMBIORIX PAY 2.8 GT</h1>
                 <span className="text-[11px] text-slate-400 font-medium">
                   · 100% Local (Sin Internet)
                 </span>
@@ -1959,10 +1959,10 @@ export default function App() {
             <button
               onClick={() => triggerClientSideZipDownload()}
               className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl flex items-center space-x-1.5 shadow-md shadow-emerald-600/20 transition cursor-pointer whitespace-nowrap shrink-0"
-              title="Descargar el proyecto Android completo (Versión 2.7 GT) en un archivo .ZIP"
+              title="Descargar el proyecto Android completo (Versión 2.8 GT) en un archivo .ZIP"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>Descargar ZIP (v2.7)</span>
+              <span>Descargar ZIP (v2.8)</span>
             </button>
 
             <button
@@ -2035,7 +2035,7 @@ export default function App() {
                 }`}
               >
                 <FolderGit2 className="w-3.5 h-3.5" />
-                <span>Archivos 2.7</span>
+                <span>Archivos 2.8</span>
               </button>
 
               <button
@@ -3019,7 +3019,7 @@ export default function App() {
                     title="Toca para ver el Sello de Autor e Ingeniería"
                   >
                     <p className="text-xs font-semibold text-slate-400">Ambiorix Pay</p>
-                    <p className="text-[11px] text-slate-500 mt-0.5">Versión 2.7</p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">Versión 2.8</p>
                     <p className="text-[11px] text-slate-500 mt-0.5">Creado por El.propiooo</p>
                     <div className="mt-2 flex justify-center">
                       <img
@@ -3050,7 +3050,7 @@ export default function App() {
                     >
                       <ArrowLeft className="w-4 h-4" />
                     </button>
-                    <h3 className="font-bold text-sm text-amber-400">Estructura Android 2.7 GT</h3>
+                    <h3 className="font-bold text-sm text-amber-400">Estructura Android 2.8 GT</h3>
                   </div>
                   <div className="space-y-2">
                     {projectFiles.map((f, idx) => (
@@ -3074,7 +3074,7 @@ export default function App() {
                     >
                       <ArrowLeft className="w-4 h-4" />
                     </button>
-                    <h3 className="font-bold text-sm text-amber-400">Guía de Compilación APK 2.7 GT</h3>
+                    <h3 className="font-bold text-sm text-amber-400">Guía de Compilación APK 2.8 GT</h3>
                   </div>
                   <div className="bg-[#131B2A] border border-slate-800 rounded-2xl p-3.5 space-y-2 text-xs text-slate-300 leading-relaxed">
                     <p className="font-bold text-white">1. Compilación automática en GitHub Actions</p>
@@ -3240,7 +3240,7 @@ export default function App() {
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="text-sm font-bold text-white flex items-center space-x-2">
                 <FileCode className="w-4 h-4 text-amber-400" />
-                <span>Proyecto Android Ambiorix Pay 2.7 GT</span>
+                <span>Proyecto Android Ambiorix Pay 2.8 GT</span>
               </h3>
               <span className="text-[11px] text-slate-400">Listo para compilar APK</span>
             </div>
@@ -3250,7 +3250,7 @@ export default function App() {
               className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs flex items-center justify-center space-x-2 transition shadow-md shadow-emerald-600/20 cursor-pointer"
             >
               <Download className="w-4 h-4" />
-              <span>Descargar Proyecto Completo v2.7 (.ZIP)</span>
+              <span>Descargar Proyecto Completo v2.8 (.ZIP)</span>
             </button>
 
             <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
@@ -3357,7 +3357,7 @@ export default function App() {
             </div>
 
             <span className="text-[11px] font-extrabold tracking-[0.2em] text-amber-400 uppercase">
-              Sello de Autor • Edición 2.7 GT
+              Sello de Autor • Edición 2.8 GT
             </span>
             <h4 className="text-base font-black text-white mt-1">
               Ambiorix Pay — Ingeniería Oficial

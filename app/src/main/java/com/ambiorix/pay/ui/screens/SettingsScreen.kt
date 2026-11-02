@@ -2026,7 +2026,7 @@ private fun SettingsFooter888() {
         )
         Spacer(modifier = Modifier.height(2.dp))
         Text(
-            text = "Versión 2.7",
+            text = "Versión 2.8",
             color = TextMuted,
             fontSize = 11.sp,
             fontWeight = FontWeight.Medium,
@@ -2097,7 +2097,7 @@ private fun SettingsFooter888() {
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
-                        text = "SELLO DE AUTOR • EDICIÓN 2.7 GT",
+                        text = "SELLO DE AUTOR • EDICIÓN 2.8 GT",
                         color = GoldPrimary,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.ExtraBold,

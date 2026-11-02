@@ -108,14 +108,14 @@ jobs:
           files: |
             final-apks/AmbiorixPay-Debug.apk
             final-apks/AmbiorixPay-Release.apk
-          name: Ambiorix Pay v2.7 GT (${{ github.ref_name }})
+          name: Ambiorix Pay v2.8 GT (${{ github.ref_name }})
           body: |
-            ## Ambiorix Pay 2.7 GT APK
-            Versión 2.7 compilada automáticamente con soporte para:
+            ## Ambiorix Pay 2.8 GT APK
+            Versión 2.8 compilada automáticamente con soporte para:
             - Historial de Pagos con Calendario Mensual Interactivo y Acumulado Diario
             - Gráfico de Barras de Movimiento Diario y Resumen Mensual
             - Registro de Hora Exacta con Segundos (Zona Horaria de Colombia) y Nombre del Remitente
-            - Esqueletos de Carga (Skeleton Loaders) y Pie de Página Versión 2.7 (888)
+            - Esqueletos de Carga (Skeleton Loaders) y Pie de Página Versión 2.8 (888)
             - Servicio ENCENDIDO / APAGADO, Programación de Horarios Comerciales y Códigos QR (QR 1 y QR 2)
           draft: false
           prerelease: false
