@@ -222,8 +222,12 @@ fun PaymentSuccessScreen(
                     Box(
                         modifier = Modifier
                             .size(96.dp)
-                            .scale(ringScale.value)
-                            .alpha(ringAlpha.value)
+                            .graphicsLayer {
+                                val rs = ringScale.value
+                                scaleX = rs
+                                scaleY = rs
+                                alpha = ringAlpha.value
+                            }
                             .clip(CircleShape)
                             .border(3.dp, Color.White.copy(alpha = 0.8f), CircleShape)
                     )
@@ -231,7 +235,11 @@ fun PaymentSuccessScreen(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
                             .size(84.dp)
-                            .scale(checkScale.value)
+                            .graphicsLayer {
+                                val cs = checkScale.value
+                                scaleX = cs
+                                scaleY = cs
+                            }
                             .clip(CircleShape)
                             .background(SuccessGreenDark.copy(alpha = 0.92f))
                             .border(3.dp, Color.White, CircleShape)

@@ -27,6 +27,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -63,36 +64,6 @@ fun KioskMainScreen(
     val isScreenResumed = lifecycleState.isAtLeast(Lifecycle.State.RESUMED)
     val isLowBatteryUnplugged = batteryPercentage in 1..20 && !isBatteryCharging
     val isCriticalBatteryUnplugged = batteryPercentage in 1..5 && !isBatteryCharging
-
-    // Animación de pulso continuo para "Esperando pago...", pausada cuando la pantalla no está visible o con reducción de movimiento
-    val pulseScale: Float
-    val pulseAlpha: Float
-    if (isScreenResumed && !reducedMotion && !isPaymentConfirmed) {
-        val infiniteTransition = rememberInfiniteTransition(label = "PulseTransition")
-        val animScale by infiniteTransition.animateFloat(
-            initialValue = 0.92f,
-            targetValue = 1.22f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(1200, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "PulseScale"
-        )
-        val animAlpha by infiniteTransition.animateFloat(
-            initialValue = 0.35f,
-            targetValue = 1.0f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(1200, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "PulseAlpha"
-        )
-        pulseScale = animScale
-        pulseAlpha = animAlpha
-    } else {
-        pulseScale = 1.0f
-        pulseAlpha = 0.9f
-    }
 
     Box(
         modifier = Modifier
@@ -168,7 +139,7 @@ fun KioskMainScreen(
                     color = Color(0xFFB91C1C),
                     border = androidx.compose.foundation.BorderStroke(
                         width = 2.dp,
-                        color = Color(0xFFFCA5A5).copy(alpha = pulseAlpha)
+                        color = Color(0xFFFCA5A5)
                     ),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -471,12 +442,8 @@ fun KioskMainScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(13.dp)
-                                    .scale(pulseScale)
-                                    .clip(CircleShape)
-                                    .background(GoldPrimary.copy(alpha = pulseAlpha))
+                            PulsingWaitingDot(
+                                isAnimated = isScreenResumed && !reducedMotion && !isPaymentConfirmed
                             )
                             Spacer(modifier = Modifier.width(14.dp))
                             Text(
@@ -579,6 +546,52 @@ fun KioskMainScreen(
             }
         }
     }
+}
+
+@Composable
+private fun PulsingWaitingDot(isAnimated: Boolean) {
+    if (!isAnimated) {
+        Box(
+            modifier = Modifier
+                .size(13.dp)
+                .clip(CircleShape)
+                .background(GoldPrimary.copy(alpha = 0.9f))
+        )
+        return
+    }
+
+    val infiniteTransition = rememberInfiniteTransition(label = "PulseTransition")
+    val animScaleState = infiniteTransition.animateFloat(
+        initialValue = 0.92f,
+        targetValue = 1.22f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "PulseScale"
+    )
+    val animAlphaState = infiniteTransition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "PulseAlpha"
+    )
+
+    Box(
+        modifier = Modifier
+            .size(13.dp)
+            .graphicsLayer {
+                val s = animScaleState.value
+                scaleX = s
+                scaleY = s
+                alpha = animAlphaState.value
+            }
+            .clip(CircleShape)
+            .background(GoldPrimary)
+    )
 }
 
 /**

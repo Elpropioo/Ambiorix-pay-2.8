@@ -286,41 +286,66 @@ declare global {
   }
 }
 
+function formatPhraseForFluidSpeech(rawPhrase: string): string {
+  return rawPhrase
+    .replace(/\.\s+Gracias/gi, ' gracias')
+    .replace(/,/g, ' ')
+    .replace(/\./g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function speakSpanishPhrase(phrase: string, onStart?: () => void, onEnd?: () => void) {
   if (!('speechSynthesis' in window)) return;
   try {
     getAudioContext();
-    window.speechSynthesis.cancel();
-    if (window.speechSynthesis.paused) {
-      window.speechSynthesis.resume();
-    }
+    const synth = window.speechSynthesis;
+    const fluidPhrase = formatPhraseForFluidSpeech(phrase);
 
-    const utterance = new SpeechSynthesisUtterance(phrase);
-    window._ambiorixUtterance = utterance;
+    const startSpeech = () => {
+      if (synth.paused) {
+        synth.resume();
+      }
 
-    const voices = window.speechSynthesis.getVoices();
-    const spanishVoice = voices.find(v => v.lang.toLowerCase() === 'es-co')
-      || voices.find(v => v.lang.toLowerCase().startsWith('es-'))
-      || voices.find(v => v.lang.toLowerCase().startsWith('es'));
+      const utterance = new SpeechSynthesisUtterance(fluidPhrase);
+      window._ambiorixUtterance = utterance;
 
-    if (spanishVoice) {
-      utterance.voice = spanishVoice;
-      utterance.lang = spanishVoice.lang;
-    } else {
-      utterance.lang = 'es-CO';
-    }
+      const voices = synth.getVoices();
+      // Priorizar voces locales (offline) en español para evitar trabas por red
+      const spanishVoice =
+        voices.find(v => v.localService && v.lang.toLowerCase() === 'es-co') ||
+        voices.find(v => v.localService && v.lang.toLowerCase().startsWith('es-')) ||
+        voices.find(v => v.localService && v.lang.toLowerCase().startsWith('es')) ||
+        voices.find(v => v.lang.toLowerCase() === 'es-co') ||
+        voices.find(v => v.lang.toLowerCase().startsWith('es-')) ||
+        voices.find(v => v.lang.toLowerCase().startsWith('es'));
 
-    utterance.rate = 0.95;
-    utterance.pitch = 1.0;
-    utterance.volume = 1.0;
+      if (spanishVoice) {
+        utterance.voice = spanishVoice;
+        utterance.lang = spanishVoice.lang;
+      } else {
+        utterance.lang = 'es-CO';
+      }
 
-    if (onStart) utterance.onstart = onStart;
-    if (onEnd) utterance.onend = onEnd;
-    utterance.onerror = () => {
-      if (onEnd) onEnd();
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
+      utterance.volume = 1.0;
+
+      if (onStart) utterance.onstart = onStart;
+      if (onEnd) utterance.onend = onEnd;
+      utterance.onerror = () => {
+        if (onEnd) onEnd();
+      };
+
+      synth.speak(utterance);
     };
 
-    window.speechSynthesis.speak(utterance);
+    if (synth.speaking || synth.pending) {
+      synth.cancel();
+      setTimeout(startSpeech, 60);
+    } else {
+      startSpeech();
+    }
   } catch (err) {
     console.warn('Speech synthesis error:', err);
   }
@@ -800,30 +825,23 @@ function drawSculptedAmbiorixCanvas(
     ctx.fill();
   }
 
-  // 4. 3D Extruded Metallic Side Depth Layers (makes the sculpted "AAA" columns truly 3D)
-  const depthSteps = 5;
-  const depthOffsetX = -tiltX * sphereRadius * 0.024 * (0.45 + 0.55 * m);
-  const depthOffsetY = Math.abs(tiltY) * sphereRadius * 0.016 + sphereRadius * 0.009;
+  // 4. 3D Extruded Metallic Side Depth Layer (single lightweight pass for smooth 60fps performance)
+  const depthOffsetX = -tiltX * sphereRadius * 0.08 * (0.45 + 0.55 * m);
+  const depthOffsetY = Math.abs(tiltY) * sphereRadius * 0.055 + sphereRadius * 0.032;
+  const layerColor = lerpRgb(cDeep, cDarkCore, 0.65);
 
-  for (let step = depthSteps; step >= 1; step--) {
-    const layerFraction = step / depthSteps;
-    const layerColor = lerpRgb(cDeep, cDarkCore, layerFraction * 0.72);
-    const dx = depthOffsetX * step;
-    const dy = depthOffsetY * step;
+  ctx.save();
+  ctx.translate(depthOffsetX, depthOffsetY);
+  ctx.beginPath();
+  ctx.arc(cx, cy, sphereRadius, 0, Math.PI * 2);
+  ctx.clip();
 
-    ctx.save();
-    ctx.translate(dx, dy);
-    ctx.beginPath();
-    ctx.arc(cx, cy, sphereRadius, 0, Math.PI * 2);
-    ctx.clip();
-
-    ctx.beginPath();
-    ctx.rect(cx - sphereRadius * 1.2, cy - sphereRadius * 1.2, sphereRadius * 2.4, sphereRadius * 2.4);
-    addMonogramCutoutsToContext(ctx, cx, cy, sphereRadius, m);
-    ctx.fillStyle = rgbCss(layerColor, 0.92);
-    ctx.fill('evenodd');
-    ctx.restore();
-  }
+  ctx.beginPath();
+  ctx.rect(cx - sphereRadius * 1.2, cy - sphereRadius * 1.2, sphereRadius * 2.4, sphereRadius * 2.4);
+  addMonogramCutoutsToContext(ctx, cx, cy, sphereRadius, m);
+  ctx.fillStyle = rgbCss(layerColor, 0.92);
+  ctx.fill('evenodd');
+  ctx.restore();
 
   // 5. Main Sculpted 3D Sphere / Monogram Surface
   ctx.save();
@@ -989,7 +1007,7 @@ function AmbiorixInteractiveLogoPreview({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+    const dpr = typeof window !== 'undefined' ? Math.min(2, window.devicePixelRatio || 1) : 1;
     const size = 240;
     if (canvas.width !== size * dpr || canvas.height !== size * dpr) {
       canvas.width = size * dpr;
@@ -1017,20 +1035,35 @@ function AmbiorixInteractiveLogoPreview({
     };
 
     const renderFrame = (now: number) => {
-      const delta = Math.min(64, Math.max(0, now - lastTime));
+      const rawDelta = now - lastTime;
+      const state = animStateRef.current;
+      const targetGold = isGoldTier || isPurpleTier ? 1 : 0;
+      const targetPurple = isPurpleTier ? 1 : 0;
+      const targetRed = isLowBatteryWarning ? 1 : 0;
+      const targetGreen = isPaymentConfirmed ? 1 : 0;
+
+      const isTransitioning =
+        Math.abs(state.goldTransition - targetGold) > 0.01 ||
+        Math.abs(state.purpleTransition - targetPurple) > 0.01 ||
+        Math.abs(state.redTransition - targetRed) > 0.01 ||
+        Math.abs(state.greenTransition - targetGreen) > 0.01;
+
+      // Throttle idle loop to ~45-50fps unless actively transitioning alloy/green state
+      if (rawDelta < 20 && !isTransitioning) {
+        if (isVisible && isOperational && !(isPaymentConfirmed && state.greenTransition >= 0.99)) {
+          rafId = requestAnimationFrame(renderFrame);
+        }
+        return;
+      }
+
+      const delta = Math.min(64, Math.max(0, rawDelta));
       lastTime = now;
 
-      const state = animStateRef.current;
       if (isVisible && isOperational && !prefersReducedMotion) {
         state.cycleProgress = (state.cycleProgress + delta / cycleDurationMs) % 1;
       } else if (prefersReducedMotion) {
         state.cycleProgress = 0.5;
       }
-
-      const targetGold = isGoldTier || isPurpleTier ? 1 : 0;
-      const targetPurple = isPurpleTier ? 1 : 0;
-      const targetRed = isLowBatteryWarning ? 1 : 0;
-      const targetGreen = isPaymentConfirmed ? 1 : 0;
 
       // Smoothly interpolate alloy state
       const alloySpeed = delta / 450;
@@ -1081,14 +1114,16 @@ function AmbiorixInteractiveLogoPreview({
       );
       ctx.restore();
 
-      if (
-        isVisible &&
-        (isOperational ||
-          Math.abs(state.goldTransition - targetGold) > 0.01 ||
-          Math.abs(state.purpleTransition - targetPurple) > 0.01 ||
-          Math.abs(state.redTransition - targetRed) > 0.01 ||
-          Math.abs(state.greenTransition - targetGreen) > 0.01)
-      ) {
+      const stillTransitioning =
+        Math.abs(state.goldTransition - targetGold) > 0.01 ||
+        Math.abs(state.purpleTransition - targetPurple) > 0.01 ||
+        Math.abs(state.redTransition - targetRed) > 0.01 ||
+        Math.abs(state.greenTransition - targetGreen) > 0.01;
+
+      // Pause background canvas loop once the green confirmation overlay covers the screen
+      const isCoveredByConfirmation = isPaymentConfirmed && state.greenTransition >= 0.99;
+
+      if (isVisible && !isCoveredByConfirmation && (isOperational || stillTransitioning)) {
         rafId = requestAnimationFrame(renderFrame);
       }
     };
@@ -2089,7 +2124,7 @@ export default function App() {
 
                     {/* AVISO ROJO PERSISTENTE DE BATERÍA BAJA (<= 20% SIN CARGAR) */}
                     {isLowBatteryUnplugged && (
-                      <div className="mt-3 p-3 rounded-2xl bg-red-700 border-2 border-red-300 shadow-lg shadow-red-900/50 flex items-center space-x-3 animate-pulse">
+                      <div className="mt-3 p-3 rounded-2xl bg-red-700 border-2 border-red-300 shadow-lg shadow-red-900/50 flex items-center space-x-3">
                         <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center shrink-0">
                           <AlertTriangle className="w-5 h-5 text-white" />
                         </div>

@@ -175,7 +175,6 @@ class SettingsActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        // No llamamos release() aquí para no cerrar el TTS de MainActivity
-        soundAnnouncer.stop()
+        // No llamamos stop() ni release() aquí para no cortar locuciones de pago activas en MainActivity
     }
 }

@@ -27,7 +27,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.PathOperation
+import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -41,15 +41,15 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.currentStateAsState
-import com.ambiorix.pay.ui.theme.SuccessGreen
-import com.ambiorix.pay.ui.theme.SuccessGreenDark
-import com.ambiorix.pay.ui.theme.SuccessGreenLight
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.acos
+import kotlin.math.asin
 import kotlin.math.cos
-import kotlin.math.pow
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 // ============================================================================
 // PALETAS METÁLICAS PREASIGNADAS (Cero asignaciones de objetos por fotograma)
@@ -106,38 +106,25 @@ fun isAmbiorixGoldTier(dailyTotalAmount: Long): Boolean {
 }
 
 /**
- * Caché geométrica reutilizable para esculpir en 3D la esfera hacia el monograma real "AAA"
- * sin crear instancias de Path en cada fotograma.
+ * Caché geométrica ultraligera que usa `PathFillType.EvenOdd` con arcos analíticos directos,
+ * eliminando por completo las costosas operaciones booleanas `PathOperation.Intersect` y
+ * `PathOperation.Difference` en la CPU.
  */
 class LogoGeometryCache {
     val outerCirclePath = Path()
-    val innerArchCirclePath = Path()
-    val morphMaskPath = Path()
-    val allCutoutsPath = Path()
-    val sideCutoutsRawPath = Path()
-    val sideCutoutsClippedPath = Path()
+    val morphMaskPath = Path().apply {
+        fillType = PathFillType.EvenOdd
+    }
+    val cutoutsPath = Path()
     var lastDiameterPx: Float = -1f
-    var lastMorphFraction: Float = -1f
+    var lastQuantizedMorph: Int = -1
 }
 
 /**
- * Animación interactiva integrada del logo de Ambiorix Pay:
- *
- * - Integración 100% orgánica (sin imagen plana sobrepuesta):
- *   La propia esfera metálica 3D se esculpe de forma continua y líquida en las tres columnas
- *   "AAA" del monograma original de Ambiorix, compartiendo iluminación especular, biseles 3D,
- *   extrusión lateral de metal y rotación suave.
- * - Regla de Niveles Metálicos (Plateado / Dorado / Morado):
- *   - De 300 ($300.000 COP) para abajo: **Plateado / Platino**.
- *   - Más de 300 hasta 600 ($300.001 a $600.000 COP): **Dorado 24K**.
- *   - Más de 600 (> $600.000 COP): **Morado Amatista Metálico**.
- * - Sincronización de Batería Baja (`isLowBatteryWarning = true`):
- *   - Mientras esté activo el aviso rojo de batería baja (<= 20% sin cargador), el logo animado
- *     se sincroniza y se pone en **Rojo Metálico Carmesí** igual que el aviso, regresando a su
- *     color normal apenas se conecte el cargador.
- * - Verificación de pago (`isPaymentConfirmed = true`):
- *   Sin importar el nivel actual, al confirmar un pago cambia rápidamente a
- *   **Verde Esmeralda**, rebota con energía y da paso a la expansión de pantalla verde.
+ * Animación interactiva optimizada del logo de Ambiorix Pay:
+ * - Cero recomposiciones de Compose por fotograma (lectura diferida a las fases de `graphicsLayer` y `DrawScope`).
+ * - Cero operaciones booleanas `PathOperation` (usa geometría analítica directa con `PathFillType.EvenOdd`).
+ * - Cadencia adaptativa ligera para máximo rendimiento en dispositivos Android modestos.
  */
 @Composable
 fun AmbiorixInteractiveLogo(
@@ -156,15 +143,13 @@ fun AmbiorixInteractiveLogo(
     val isPurpleTarget = isAmbiorixPurpleTier(dailyTotalAmount)
     val isGoldTarget = isAmbiorixGoldTier(dailyTotalAmount)
 
-    // Fase continua [0f..1f)
+    // Fase continua [0f..1f) leída únicamente dentro de graphicsLayer y DrawScope (cero recomposiciones)
     var cycleProgress by remember { mutableFloatStateOf(0.35f) }
 
-    // Transiciones suaves entre Plateado (0f), Dorado (>300), Morado (>600) y Rojo (Aviso de batería baja)
     val goldTransition = remember { Animatable(if (isGoldTarget || isPurpleTarget) 1f else 0f) }
     val purpleTransition = remember { Animatable(if (isPurpleTarget) 1f else 0f) }
     val redTransition = remember { Animatable(if (isLowBatteryWarning) 1f else 0f) }
 
-    // Transición reactiva al evento real de pago confirmado (0f = metal normal, 1f = verde confirmación)
     val greenTransition = remember { Animatable(0f) }
     val confirmationBounceScale = remember { Animatable(1f) }
     val shockwaveProgress = remember { Animatable(0f) }
@@ -174,7 +159,7 @@ fun AmbiorixInteractiveLogo(
             goldTransition.animateTo(
                 targetValue = if (isGoldTarget || isPurpleTarget) 1f else 0f,
                 animationSpec = tween(
-                    durationMillis = if (reducedMotion) 150 else 680,
+                    durationMillis = if (reducedMotion) 150 else 550,
                     easing = FastOutSlowInEasing
                 )
             )
@@ -183,7 +168,7 @@ fun AmbiorixInteractiveLogo(
             purpleTransition.animateTo(
                 targetValue = if (isPurpleTarget) 1f else 0f,
                 animationSpec = tween(
-                    durationMillis = if (reducedMotion) 150 else 680,
+                    durationMillis = if (reducedMotion) 150 else 550,
                     easing = FastOutSlowInEasing
                 )
             )
@@ -194,7 +179,7 @@ fun AmbiorixInteractiveLogo(
         redTransition.animateTo(
             targetValue = if (isLowBatteryWarning) 1f else 0f,
             animationSpec = tween(
-                durationMillis = if (reducedMotion) 120 else 360,
+                durationMillis = if (reducedMotion) 120 else 320,
                 easing = FastOutSlowInEasing
             )
         )
@@ -211,14 +196,14 @@ fun AmbiorixInteractiveLogo(
             if (!reducedMotion) {
                 launch {
                     confirmationBounceScale.animateTo(
-                        targetValue = 1.15f,
+                        targetValue = 1.14f,
                         animationSpec = keyframes {
-                            durationMillis = 460
+                            durationMillis = 420
                             1.00f at 0
-                            0.90f at 65 with FastOutSlowInEasing
-                            1.28f at 220 with FastOutSlowInEasing
-                            0.97f at 350 with FastOutSlowInEasing
-                            1.15f at 460 with FastOutSlowInEasing
+                            0.92f at 60 with FastOutSlowInEasing
+                            1.24f at 200 with FastOutSlowInEasing
+                            0.98f at 320 with FastOutSlowInEasing
+                            1.14f at 420 with FastOutSlowInEasing
                         }
                     )
                 }
@@ -226,7 +211,7 @@ fun AmbiorixInteractiveLogo(
                     shockwaveProgress.snapTo(0f)
                     shockwaveProgress.animateTo(
                         targetValue = 1f,
-                        animationSpec = tween(durationMillis = 480, easing = FastOutSlowInEasing)
+                        animationSpec = tween(durationMillis = 440, easing = FastOutSlowInEasing)
                     )
                 }
             } else {
@@ -237,7 +222,7 @@ fun AmbiorixInteractiveLogo(
             launch {
                 greenTransition.animateTo(
                     targetValue = 0f,
-                    animationSpec = tween(durationMillis = if (reducedMotion) 150 else 500, easing = FastOutSlowInEasing)
+                    animationSpec = tween(durationMillis = if (reducedMotion) 150 else 420, easing = FastOutSlowInEasing)
                 )
             }
             launch {
@@ -255,12 +240,19 @@ fun AmbiorixInteractiveLogo(
         }
     }
 
-    // Bucle de animación continua ligado a los fotogramas nativos de Android
-    LaunchedEffect(isScreenResumed, reducedMotion, isServiceOperational) {
+    // Bucle de animación ligero: se pausa automáticamente cuando la pantalla de confirmación ya cubrió la vista
+    LaunchedEffect(isScreenResumed, reducedMotion, isServiceOperational, isPaymentConfirmed) {
         if (!isScreenResumed || reducedMotion || !isServiceOperational) {
             if (reducedMotion) {
                 cycleProgress = 0.50f
             }
+            return@LaunchedEffect
+        }
+
+        if (isPaymentConfirmed) {
+            // Mientras la pantalla verde de confirmación está activa, tras los primeros 450ms
+            // pausamos el ciclo de fondo para liberar 100% la CPU/GPU
+            delay(460L)
             return@LaunchedEffect
         }
 
@@ -273,34 +265,17 @@ fun AmbiorixInteractiveLogo(
                     lastFrameMs = frameTimeMs
                 }
                 val deltaMs = (frameTimeMs - lastFrameMs).coerceIn(0L, 64L)
-                lastFrameMs = frameTimeMs
-
-                val next = (cycleProgress + deltaMs.toFloat() / cycleDurationMs.toFloat()) % 1.0f
-                cycleProgress = if (next < 0f) next + 1f else next
+                // Limitar actualizaciones innecesarias en pantallas de 120Hz (~45fps efectivos)
+                if (deltaMs >= 20L) {
+                    lastFrameMs = frameTimeMs
+                    val next = (cycleProgress + deltaMs.toFloat() / cycleDurationMs.toFloat()) % 1.0f
+                    cycleProgress = if (next < 0f) next + 1f else next
+                }
             }
         }
     }
 
-    // Onda sinusoidal continua y orgánica (C² diferenciable, sin pausas bruscas ni cortes):
-    // Fluye suavemente de Esfera (0.0) -> Logo Esculpido 3D (1.0) -> Esfera (0.0)
-    val rawWave = 0.5f * (1f - cos(2.0 * PI * cycleProgress.toDouble()).toFloat())
-    val baseMorph = if (reducedMotion) 1f else smoothOrganicMorph(rawWave)
-    val morphFraction = (baseMorph + (1f - baseMorph) * greenTransition.value).coerceIn(0f, 1f)
-
-    val rotationRadians = (cycleProgress * 2.0 * PI).toFloat()
-    val goldFactor = goldTransition.value
-    val purpleFactor = purpleTransition.value
-    val redFactor = redTransition.value
-    val greenFactor = greenTransition.value
-    val bounceScale = confirmationBounceScale.value
-    val wave = shockwaveProgress.value
-
     val geometryCache = remember { LogoGeometryCache() }
-
-    // Rotación 3D fluida: la esfera/logo gira suavemente en el espacio mostrando su espesor metálico
-    val tiltY = if (reducedMotion) 0f else (sin(rotationRadians.toDouble()).toFloat() * 16f * (1f - 0.45f * greenFactor))
-    val tiltX = if (reducedMotion) 0f else (cos(rotationRadians.toDouble()).toFloat() * 7f * (1f - 0.45f * greenFactor))
-    val breathingScale = if (reducedMotion) 1f else (1f + 0.025f * sin((rotationRadians * 2f).toDouble()).toFloat())
 
     Box(
         modifier = modifier.size(size),
@@ -310,6 +285,15 @@ fun AmbiorixInteractiveLogo(
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer {
+                    val progress = cycleProgress
+                    val greenFactor = greenTransition.value
+                    val bounceScale = confirmationBounceScale.value
+                    val rotationRadians = (progress * 2.0 * PI).toFloat()
+
+                    val tiltY = if (reducedMotion) 0f else (sin(rotationRadians.toDouble()).toFloat() * 14f * (1f - 0.45f * greenFactor))
+                    val tiltX = if (reducedMotion) 0f else (cos(rotationRadians.toDouble()).toFloat() * 6f * (1f - 0.45f * greenFactor))
+                    val breathingScale = if (reducedMotion) 1f else (1f + 0.02f * sin((rotationRadians * 2f).toDouble()).toFloat())
+
                     scaleX = breathingScale * bounceScale
                     scaleY = breathingScale * bounceScale
                     rotationY = tiltY
@@ -317,23 +301,29 @@ fun AmbiorixInteractiveLogo(
                     cameraDistance = 15f * density
                 }
         ) {
+            val progress = cycleProgress
+            val greenFactor = greenTransition.value
+            val rawWave = 0.5f * (1f - cos(2.0 * PI * progress.toDouble()).toFloat())
+            val baseMorph = if (reducedMotion) 1f else smoothOrganicMorph(rawWave)
+            val morphFraction = (baseMorph + (1f - baseMorph) * greenFactor).coerceIn(0f, 1f)
+            val rotationRadians = (progress * 2.0 * PI).toFloat()
+
             drawSculptedAmbiorixSphereLogo(
                 cache = geometryCache,
                 morphFraction = morphFraction,
                 rotationRadians = rotationRadians,
-                goldFactor = goldFactor,
-                purpleFactor = purpleFactor,
-                redFactor = redFactor,
+                goldFactor = goldTransition.value,
+                purpleFactor = purpleTransition.value,
+                redFactor = redTransition.value,
                 greenFactor = greenFactor,
-                shockwave = wave
+                shockwave = shockwaveProgress.value
             )
         }
     }
 }
 
 /**
- * Renderiza en un solo lienzo integrado la esfera metálica 3D que se esculpe orgánicamente
- * en el monograma "AAA" de Ambiorix con espesor 3D, bisel luminoso y reflejos especulares.
+ * Renderiza en un solo lienzo optimizado la esfera metálica 3D y el monograma "AAA" de Ambiorix.
  */
 fun DrawScope.drawSculptedAmbiorixSphereLogo(
     cache: LogoGeometryCache,
@@ -351,7 +341,7 @@ fun DrawScope.drawSculptedAmbiorixSphereLogo(
     val center = Offset(canvasW * 0.5f, canvasH * 0.5f)
     val sphereRadius = minDim * 0.37f
 
-    // 1. Interpolar paleta activa: Plateado (<=300) <-> Dorado (>300) <-> Morado (>600) <-> Rojo (Batería baja) <-> Verde Esmeralda (Confirmado)
+    // 1. Interpolar paleta activa
     val goldOrSilverSpec = lerpColor(SilverSpecular, GoldSpecular, goldFactor)
     val goldOrSilverBright = lerpColor(SilverBright, GoldBright, goldFactor)
     val goldOrSilverMid = lerpColor(SilverMid, GoldMid, goldFactor)
@@ -377,472 +367,349 @@ fun DrawScope.drawSculptedAmbiorixSphereLogo(
     val activeShadow = lerpColor(baseShadow, EmeraldShadow, greenFactor)
 
     // 2. Halo metálico ambiental exterior
+    val haloRadius = sphereRadius * (1.34f + 0.08f * redFactor + 0.20f * greenFactor)
     drawCircle(
         brush = Brush.radialGradient(
-            colors = listOf(
-                activeBright.copy(alpha = 0.24f + 0.14f * redFactor + 0.26f * greenFactor),
-                activeMid.copy(alpha = 0.14f + 0.10f * redFactor + 0.22f * greenFactor),
-                Color.Transparent
-            ),
+            0.0f to activeBright.copy(alpha = 0.22f + 0.12f * redFactor + 0.22f * greenFactor),
+            0.6f to activeMid.copy(alpha = 0.10f + 0.08f * redFactor + 0.16f * greenFactor),
+            1.0f to Color.Transparent,
             center = center,
-            radius = sphereRadius * (1.38f + 0.10f * redFactor + 0.24f * greenFactor)
+            radius = haloRadius
         ),
-        radius = sphereRadius * (1.38f + 0.10f * redFactor + 0.24f * greenFactor),
+        radius = haloRadius,
         center = center
     )
 
     // 3. Ondas expansivas verdes al confirmar un pago
     if (shockwave > 0.01f) {
-        val waveRadius1 = sphereRadius * (1.0f + shockwave * 1.65f)
+        val waveRadius1 = sphereRadius * (1.0f + shockwave * 1.55f)
         val waveAlpha1 = (1f - shockwave).coerceIn(0f, 1f)
         drawCircle(
             color = EmeraldBright.copy(alpha = 0.85f * waveAlpha1),
             radius = waveRadius1,
             center = center,
-            style = Stroke(width = minDim * 0.040f * (1f - shockwave * 0.4f))
+            style = Stroke(width = minDim * 0.036f * (1f - shockwave * 0.4f))
         )
-
-        val wave2 = ((shockwave - 0.16f) / 0.84f).coerceIn(0f, 1f)
-        if (wave2 > 0f) {
-            val waveRadius2 = sphereRadius * (1.0f + wave2 * 1.32f)
-            val waveAlpha2 = (1f - wave2).coerceIn(0f, 1f)
-            drawCircle(
-                color = Color.White.copy(alpha = 0.70f * waveAlpha2),
-                radius = waveRadius2,
-                center = center,
-                style = Stroke(width = minDim * 0.022f)
-            )
-        }
     }
 
-    // 4. Actualizar la geometría esculpida Esfera -> Monograma AAA en caché
+    // 4. Actualizar la geometría en caché cuantizada (sin PathOperation booleano)
     val sphereDiameter = sphereRadius * 2f
-    if (abs(cache.lastDiameterPx - sphereDiameter) > 0.4f ||
-        abs(cache.lastMorphFraction - morphFraction) > 0.0015f
+    val quantizedMorph = (morphFraction * 100f).toInt().coerceIn(0, 100)
+    if (abs(cache.lastDiameterPx - sphereDiameter) > 0.5f ||
+        cache.lastQuantizedMorph != quantizedMorph
     ) {
-        buildIntegratedSphereToMonogramPath(
+        buildFastEvenOddMonogramPath(
             cache = cache,
             center = center,
             radius = sphereRadius,
-            morph = morphFraction
+            morph = quantizedMorph / 100f
         )
     }
 
-    // 5. Sombra interna del núcleo esférico (visible a través de las ranuras esculpidas del logo AAA
-    // para que el logo se sienta tallado dentro de la esfera 3D y no pegado encima)
-    if (morphFraction > 0.02f) {
+    // 5. Sombra interna del núcleo esférico (un solo círculo simple)
+    if (morphFraction > 0.03f) {
         drawCircle(
-            brush = Brush.radialGradient(
-                colors = listOf(
-                    activeShadow.copy(alpha = 0.82f * morphFraction),
-                    activeDeep.copy(alpha = 0.38f * morphFraction),
-                    Color.Transparent
-                ),
-                center = center,
-                radius = sphereRadius * 0.98f
-            ),
+            color = activeShadow.copy(alpha = 0.72f * morphFraction),
             radius = sphereRadius * 0.96f,
             center = center
         )
     }
 
-    // 6. Capa de extrusión 3D lateral (espesor metálico de las columnas "AAA" cuando la esfera rota)
-    val extrudeOffsetX = -sin(rotationRadians.toDouble()).toFloat() * sphereRadius * 0.055f * morphFraction
-    val extrudeOffsetY = cos(rotationRadians.toDouble()).toFloat() * sphereRadius * 0.032f * morphFraction
-    if (morphFraction > 0.04f) {
-        withTransform({
-            translate(left = extrudeOffsetX, top = extrudeOffsetY)
-        }) {
-            clipPath(cache.morphMaskPath) {
+    val cosRot = cos(rotationRadians.toDouble()).toFloat()
+    val sinRot = sin(rotationRadians.toDouble()).toFloat()
+
+    // 6. Extrusión lateral 3D ligera (una sola pasada con color sólido dentro del recorte circular)
+    clipPath(cache.outerCirclePath) {
+        if (morphFraction > 0.05f) {
+            val extrudeOffsetX = -sinRot * sphereRadius * 0.048f * morphFraction
+            val extrudeOffsetY = cosRot * sphereRadius * 0.028f * morphFraction
+            withTransform({
+                translate(left = extrudeOffsetX, top = extrudeOffsetY)
+            }) {
+                drawPath(
+                    path = cache.morphMaskPath,
+                    color = activeDeep
+                )
+            }
+        }
+
+        // 7. Cara frontal esculpida usando EvenOdd (sin necesidad de PathOperation)
+        val lightOffsetX = center.x - sphereRadius * 0.32f * cosRot
+        val lightOffsetY = center.y - sphereRadius * 0.34f * sinRot
+
+        clipPath(cache.morphMaskPath) {
+            drawCircle(
+                brush = Brush.radialGradient(
+                    0.00f to baseSpecular,
+                    0.24f to baseBright,
+                    0.58f to baseMid,
+                    0.85f to baseDeep,
+                    1.00f to baseShadow,
+                    center = Offset(lightOffsetX, lightOffsetY),
+                    radius = sphereRadius * 1.38f
+                ),
+                radius = sphereRadius,
+                center = center
+            )
+
+            // Cuando hay confirmación de pago, el verde esmeralda nace desde el centro del mismo logo
+            if (greenFactor > 0.005f) {
+                val greenBirthRadius = (sphereRadius * 1.45f * greenFactor).coerceAtLeast(1f)
                 drawCircle(
-                    brush = Brush.linearGradient(
-                        colors = listOf(activeDeep, activeShadow, activeMid),
-                        start = Offset(center.x - sphereRadius, center.y - sphereRadius),
-                        end = Offset(center.x + sphereRadius, center.y + sphereRadius)
+                    brush = Brush.radialGradient(
+                        0.00f to EmeraldSpecular,
+                        0.28f to EmeraldBright,
+                        0.65f to EmeraldMid,
+                        0.92f to EmeraldDeep,
+                        1.00f to Color.Transparent,
+                        center = center,
+                        radius = greenBirthRadius
                     ),
                     radius = sphereRadius,
                     center = center
                 )
             }
+
+            // Meridianos 3D sutiles cuando está cerca de la forma esférica
+            val meridianAlpha = ((1f - morphFraction * 0.88f).coerceIn(0f, 1f)) * 0.38f
+            if (meridianAlpha > 0.03f) {
+                val meridianStroke = minDim * 0.006f
+                for (i in 0 until 2) {
+                    val phase = rotationRadians + (i * PI.toFloat() / 2f)
+                    val rx = sphereRadius * abs(cos(phase.toDouble())).toFloat().coerceAtLeast(0.06f)
+                    drawOval(
+                        color = activeSpecular.copy(alpha = meridianAlpha),
+                        topLeft = Offset(center.x - rx, center.y - sphereRadius),
+                        size = Size(rx * 2f, sphereRadius * 2f),
+                        style = Stroke(width = meridianStroke)
+                    )
+                }
+            }
+        }
+
+        // 8. Bisel metálico sobre los bordes esculpidos
+        if (morphFraction > 0.04f) {
+            val bevelAlpha = (morphFraction * 0.85f).coerceIn(0f, 1f)
+            drawPath(
+                path = cache.cutoutsPath,
+                color = activeSpecular.copy(alpha = bevelAlpha * 0.65f),
+                style = Stroke(
+                    width = minDim * 0.0065f,
+                    cap = StrokeCap.Round,
+                    join = StrokeJoin.Round
+                )
+            )
         }
     }
 
-    // 7. Cara frontal esculpida de la esfera / monograma AAA con iluminación esférica 3D continua
-    val lightOffsetX = center.x - sphereRadius * 0.32f * cos(rotationRadians.toDouble()).toFloat()
-    val lightOffsetY = center.y - sphereRadius * 0.34f * sin(rotationRadians.toDouble()).toFloat()
+    // 9. Borde exterior de la esfera y anillo orbital en rotación
+    drawCircle(
+        color = activeBright.copy(alpha = 0.85f),
+        radius = sphereRadius,
+        center = center,
+        style = Stroke(width = minDim * 0.008f)
+    )
 
-    clipPath(cache.morphMaskPath) {
-        // Sombreado esférico 3D base (Plateado, Dorado, Morado o Rojo)
-        drawCircle(
-            brush = Brush.radialGradient(
-                0.00f to baseSpecular,
-                0.22f to baseBright,
-                0.56f to baseMid,
-                0.84f to baseDeep,
-                1.00f to baseShadow,
-                center = Offset(lightOffsetX, lightOffsetY),
-                radius = sphereRadius * 1.38f
-            ),
-            radius = sphereRadius,
-            center = center
-        )
-
-        // Si hay confirmación de pago, el color Verde Esmeralda nace desde el centro del mismo logo
-        // y se expande radialmente por toda su estructura 3D sin superponer otro logo encima
-        if (greenFactor > 0.005f) {
-            val greenBirthRadius = (sphereRadius * 1.45f * greenFactor).coerceAtLeast(1f)
-            drawCircle(
-                brush = Brush.radialGradient(
-                    0.00f to EmeraldSpecular,
-                    0.28f to EmeraldBright,
-                    0.65f to EmeraldMid,
-                    0.92f to EmeraldDeep,
-                    1.00f to Color.Transparent,
-                    center = center,
-                    radius = greenBirthRadius
-                ),
-                radius = sphereRadius,
-                center = center
-            )
-        }
-
-        // Contra-luz especular inferior para dar volumen metálico líquido
-        val rimLightX = center.x + sphereRadius * 0.45f * cos(rotationRadians.toDouble()).toFloat()
-        val rimLightY = center.y + sphereRadius * 0.45f * sin(rotationRadians.toDouble()).toFloat()
-        drawCircle(
-            brush = Brush.radialGradient(
-                colors = listOf(
-                    activeBright.copy(alpha = 0.55f),
-                    Color.Transparent
-                ),
-                center = Offset(rimLightX, rimLightY),
-                radius = sphereRadius * 0.90f
-            ),
-            radius = sphereRadius,
-            center = center
-        )
-
-        // Meridianos 3D que giran con la esfera y se funden suavemente con las líneas del logo AAA
-        val meridianAlpha = ((1f - morphFraction * 0.88f).coerceIn(0.08f, 1f)) * 0.42f
-        val meridianStroke = minDim * 0.0065f
-        for (i in 0 until 3) {
-            val phase = rotationRadians + (i * PI.toFloat() / 3f)
-            val rx = sphereRadius * abs(cos(phase.toDouble())).toFloat().coerceAtLeast(0.05f)
-            drawOval(
-                color = activeSpecular.copy(alpha = meridianAlpha),
-                topLeft = Offset(center.x - rx, center.y - sphereRadius),
-                size = Size(rx * 2f, sphereRadius * 2f),
-                style = Stroke(width = meridianStroke)
-            )
-        }
-
-        // Destello especular diagonal que recorre el metal esculpido
-        val sheenPhase = ((rotationRadians / (2f * PI.toFloat())) * 2f) % 1f
-        val sheenX = (center.x - sphereRadius * 1.4f) + (sphereRadius * 2.8f * sheenPhase)
-        drawLine(
-            brush = Brush.linearGradient(
-                colors = listOf(
-                    Color.Transparent,
-                    activeSpecular.copy(alpha = 0.38f),
-                    activeBright.copy(alpha = 0.24f),
-                    Color.Transparent
-                ),
-                start = Offset(sheenX - sphereRadius * 0.35f, center.y - sphereRadius),
-                end = Offset(sheenX + sphereRadius * 0.35f, center.y + sphereRadius)
-            ),
-            start = Offset(sheenX + sphereRadius * 0.3f, center.y - sphereRadius * 1.1f),
-            end = Offset(sheenX - sphereRadius * 0.3f, center.y + sphereRadius * 1.1f),
-            strokeWidth = sphereRadius * 0.52f,
-            cap = StrokeCap.Round
-        )
-    }
-
-    // 8. Bisel metálico brillante a lo largo de todos los bordes esculpidos del monograma AAA
-    if (morphFraction > 0.03f) {
-        val bevelAlpha = (morphFraction * 0.92f).coerceIn(0f, 1f)
-        drawPath(
-            path = cache.morphMaskPath,
-            brush = Brush.sweepGradient(
-                0.00f to activeSpecular.copy(alpha = bevelAlpha),
-                0.25f to activeBright.copy(alpha = bevelAlpha * 0.85f),
-                0.50f to activeDeep.copy(alpha = bevelAlpha * 0.70f),
-                0.75f to activeBright.copy(alpha = bevelAlpha * 0.90f),
-                1.00f to activeSpecular.copy(alpha = bevelAlpha),
-                center = center
-            ),
-            style = Stroke(
-                width = minDim * (0.0055f + 0.0045f * morphFraction),
-                cap = StrokeCap.Round,
-                join = StrokeJoin.Round
-            )
-        )
-    }
-
-    // 9. Anillo orbital metálico exterior en rotación continua
     val ringRotationDeg = (rotationRadians * 180f / PI.toFloat())
     rotate(degrees = ringRotationDeg, pivot = center) {
         drawCircle(
             brush = Brush.sweepGradient(
                 0.00f to activeSpecular,
-                0.25f to activeBright,
-                0.50f to activeDeep,
-                0.75f to activeMid,
+                0.30f to activeBright,
+                0.60f to activeDeep,
                 1.00f to activeSpecular,
                 center = center
             ),
-            radius = sphereRadius * 1.05f,
+            radius = sphereRadius * 1.07f,
             center = center,
-            style = Stroke(width = minDim * (0.013f + 0.008f * greenFactor))
+            style = Stroke(width = minDim * (0.012f + 0.006f * greenFactor))
         )
     }
 
-    // Partículas orbitales sobre el anillo exterior
-    val orbitRadius = sphereRadius * 1.12f
+    val orbitRadius = sphereRadius * 1.07f
     drawCircle(
-        color = activeSpecular.copy(alpha = 0.90f),
+        color = activeSpecular,
         radius = minDim * 0.013f,
         center = Offset(
-            center.x + orbitRadius * cos(rotationRadians.toDouble()).toFloat(),
-            center.y + orbitRadius * sin(rotationRadians.toDouble()).toFloat()
+            center.x + orbitRadius * cosRot,
+            center.y + orbitRadius * sinRot
         )
     )
     drawCircle(
-        color = activeBright.copy(alpha = 0.80f),
+        color = activeBright,
         radius = minDim * 0.010f,
         center = Offset(
-            center.x + orbitRadius * cos((rotationRadians + PI).toDouble()).toFloat(),
-            center.y + orbitRadius * sin((rotationRadians + PI).toDouble()).toFloat()
+            center.x - orbitRadius * cosRot,
+            center.y - orbitRadius * sinRot
         )
     )
 }
 
 /**
- * Esculpe progresivamente la esfera completa (`morph = 0f`) hacia la geometría exacta
- * calibrada píxel a píxel del monograma circular "AAA" original de Ambiorix (`morph = 1f`).
- *
- * Proporciones exactas medidas del logo original (radio exterior R = 1.000):
- * - Grosor uniforme de todos los postes y arcos: ~0.166 * R
- * - Postes verticales de la "A" central: x en [-0.274*R, -0.112*R] y [+0.112*R, +0.274*R]
- * - Ventana central: x en [-0.112*R, +0.112*R], ventana superior y en [-0.762*R, -0.083*R], inferior y > +0.083*R
- * - Canales verticales de separación: x en [-0.417*R, -0.274*R] y [+0.274*R, +0.417*R]
- * - Postes interiores de las "A" laterales: x en [-0.583*R, -0.417*R] y [+0.417*R, +0.583*R]
- * - Arcos exteriores de las "A" laterales: radio interior 0.822*R a radio exterior 1.000*R,
- *   terminando con corte limpio en y = +0.50*R mientras los 4 postes interiores bajan hasta la base.
+ * Construye la máscara `EvenOdd` del monograma "AAA" directamente con arcos analíticos,
+ * sin usar `PathOperation.Intersect` ni `PathOperation.Difference`.
  */
-private fun buildIntegratedSphereToMonogramPath(
+private fun buildFastEvenOddMonogramPath(
     cache: LogoGeometryCache,
     center: Offset,
     radius: Float,
     morph: Float
 ) {
-    val diameter = radius * 2f
-    cache.lastDiameterPx = diameter
-    cache.lastMorphFraction = morph
+    cache.lastDiameterPx = radius * 2f
+    cache.lastQuantizedMorph = (morph * 100f).toInt()
 
-    cache.outerCirclePath.reset()
-    cache.outerCirclePath.addOval(
-        Rect(
-            left = center.x - radius,
-            top = center.y - radius,
-            right = center.x + radius,
-            bottom = center.y + radius
-        )
+    val outerRect = Rect(
+        left = center.x - radius,
+        top = center.y - radius,
+        right = center.x + radius,
+        bottom = center.y + radius
     )
 
+    cache.outerCirclePath.reset()
+    cache.outerCirclePath.addOval(outerRect)
+
+    cache.cutoutsPath.reset()
     cache.morphMaskPath.reset()
-    cache.morphMaskPath.addPath(cache.outerCirclePath)
+    cache.morphMaskPath.fillType = PathFillType.EvenOdd
+    cache.morphMaskPath.addRect(
+        Rect(
+            left = center.x - radius * 1.15f,
+            top = center.y - radius * 1.15f,
+            right = center.x + radius * 1.15f,
+            bottom = center.y + radius * 1.15f
+        )
+    )
 
     if (morph <= 0.005f) {
         return
     }
 
-    val m = morph.coerceIn(0f, 1f)
-    cache.allCutoutsPath.reset()
+    val ease = morph * morph * (3f - 2f * morph)
+    val cx = center.x
+    val cy = center.y
 
-    // 1. Dos canales verticales de separación entre las 3 "A":
-    // Centros en ±0.3455 * R con semiancho = 0.0715 * R * m -> cubre [0.274*R, 0.417*R]
-    val channelHalfW = radius * 0.0715f * m
-    val leftChannelX = center.x - radius * 0.3455f
-    val rightChannelX = center.x + radius * 0.3455f
-    val channelCorner = CornerRadius(radius * 0.015f * m, radius * 0.015f * m)
+    // 1. Dos canales verticales de separación entre las 3 "A"
+    val gapHalfW = radius * 0.0715f * ease
+    val gapHalfH = radius * 1.05f * (ease * 1.08f).coerceAtMost(1f)
+    val gapCorner = CornerRadius(radius * 0.015f * ease, radius * 0.015f * ease)
 
-    cache.allCutoutsPath.addRoundRect(
+    val g1Cx = cx - radius * 0.3455f
+    cache.cutoutsPath.addRoundRect(
         RoundRect(
-            rect = Rect(
-                left = leftChannelX - channelHalfW,
-                top = center.y - radius * 1.05f,
-                right = leftChannelX + channelHalfW,
-                bottom = center.y + radius * 1.05f
-            ),
-            cornerRadius = channelCorner
+            rect = Rect(g1Cx - gapHalfW, cy - gapHalfH, g1Cx + gapHalfW, cy + gapHalfH),
+            cornerRadius = gapCorner
         )
     )
-    cache.allCutoutsPath.addRoundRect(
+
+    val g2Cx = cx + radius * 0.3455f
+    cache.cutoutsPath.addRoundRect(
         RoundRect(
-            rect = Rect(
-                left = rightChannelX - channelHalfW,
-                top = center.y - radius * 1.05f,
-                right = rightChannelX + channelHalfW,
-                bottom = center.y + radius * 1.05f
-            ),
-            cornerRadius = channelCorner
+            rect = Rect(g2Cx - gapHalfW, cy - gapHalfH, g2Cx + gapHalfW, cy + gapHalfH),
+            cornerRadius = gapCorner
         )
     )
 
-    // 2. Columna Central "A": ventana superior y ranura inferior bajo el travesaño central
-    val centerWindowHalfW = radius * 0.112f * m
-    val crossbarTopY = center.y - radius * 0.083f
-    val crossbarBottomY = center.y + radius * 0.083f
-    val windowCorner = CornerRadius(radius * 0.022f * m, radius * 0.022f * m)
+    // 2. Ventana superior y ranura inferior de la "A" central
+    val cHoleHalfW = radius * 0.112f * ease
+    val crossbarTopY = cy - radius * 0.083f
+    val cTopH = radius * 0.679f * ease
+    val cCorner = CornerRadius(radius * 0.022f * ease, radius * 0.022f * ease)
 
-    // Ventana superior de la "A" central: desde y = -0.762*R hasta -0.083*R
-    val centerTopH = radius * 0.679f * m
-    if (centerTopH > 0.5f) {
-        cache.allCutoutsPath.addRoundRect(
+    if (cTopH > 0.5f) {
+        cache.cutoutsPath.addRoundRect(
             RoundRect(
-                rect = Rect(
-                    left = center.x - centerWindowHalfW,
-                    top = crossbarTopY - centerTopH,
-                    right = center.x + centerWindowHalfW,
-                    bottom = crossbarTopY
-                ),
-                cornerRadius = windowCorner
+                rect = Rect(cx - cHoleHalfW, crossbarTopY - cTopH, cx + cHoleHalfW, crossbarTopY),
+                cornerRadius = cCorner
             )
         )
     }
 
-    // Ranura inferior de la "A" central (se abre hasta la base de la esfera)
-    val centerBottomH = radius * 0.98f * m
-    if (centerBottomH > 0.5f) {
-        cache.allCutoutsPath.addRoundRect(
+    val cBotTop = cy + radius * (1.02f - 0.937f * ease)
+    val cBotBottom = cy + radius * 1.06f
+    if (cBotBottom > cBotTop) {
+        cache.cutoutsPath.addRoundRect(
             RoundRect(
-                rect = Rect(
-                    left = center.x - centerWindowHalfW,
-                    top = crossbarBottomY,
-                    right = center.x + centerWindowHalfW,
-                    bottom = crossbarBottomY + centerBottomH
-                ),
-                cornerRadius = windowCorner
+                rect = Rect(cx - cHoleHalfW, cBotTop, cx + cHoleHalfW, cBotBottom),
+                cornerRadius = cCorner
             )
         )
     }
 
-    // 3. Columnas Izquierda y Derecha "A":
-    // Sus ventanas internas están delimitadas exteriormente por el círculo concéntrico de radio 0.822 * R
-    // e interiormente por el poste vertical de cada "A" lateral (en |x| = 0.583 * R).
-    val sideInnerStemOffset = radius * 0.583f
-    val innerArchRadius = radius * (0.583f + 0.239f * m)
-    cache.innerArchCirclePath.reset()
-    cache.innerArchCirclePath.addOval(
-        Rect(
-            left = center.x - innerArchRadius,
-            top = center.y - innerArchRadius,
-            right = center.x + innerArchRadius,
-            bottom = center.y + innerArchRadius
-        )
-    )
+    // 3. Ventanas superiores en forma de "D" de las "A" laterales (con arco analítico directo)
+    val xStem = radius * 0.583f
+    val yBar = radius * 0.083f
+    val rInner = radius * (0.583f + 0.239f * ease)
 
-    cache.sideCutoutsRawPath.reset()
-    val sideSpanW = (innerArchRadius - sideInnerStemOffset + radius * 0.04f) * m
-    val sideTopH = radius * 0.68f * m
-    val sideBottomH = radius * 0.72f * m
-    val sideCorner = CornerRadius(radius * 0.018f * m, radius * 0.018f * m)
+    if (rInner > xStem + 0.5f) {
+        val dyStem = sqrt((rInner * rInner - xStem * xStem).coerceAtLeast(0f))
+        if (dyStem > yBar + 0.5f) {
+            val dxBar = sqrt((rInner * rInner - yBar * yBar).coerceAtLeast(0f))
+            val sinBar = (yBar / rInner).coerceAtMost(0.999f)
+            val cosStem = (xStem / rInner).coerceAtMost(0.999f)
+            val rInnerRect = Rect(cx - rInner, cy - rInner, cx + rInner, cy + rInner)
 
-    if (sideSpanW > 0.5f) {
-        // Ventana superior de la "A" izquierda
-        cache.sideCutoutsRawPath.addRoundRect(
-            RoundRect(
-                rect = Rect(
-                    left = (center.x - sideInnerStemOffset) - sideSpanW,
-                    top = crossbarTopY - sideTopH,
-                    right = center.x - sideInnerStemOffset,
-                    bottom = crossbarTopY
-                ),
-                cornerRadius = sideCorner
-            )
-        )
-        // Ranura inferior de la "A" izquierda
-        cache.sideCutoutsRawPath.addRoundRect(
-            RoundRect(
-                rect = Rect(
-                    left = (center.x - sideInnerStemOffset) - sideSpanW,
-                    top = crossbarBottomY,
-                    right = center.x - sideInnerStemOffset,
-                    bottom = crossbarBottomY + sideBottomH
-                ),
-                cornerRadius = sideCorner
-            )
-        )
+            val degBar = (asin(sinBar.toDouble()) * 180.0 / PI).toFloat()
+            val degStem = (acos(cosStem.toDouble()) * 180.0 / PI).toFloat()
 
-        // Ventana superior de la "A" derecha
-        cache.sideCutoutsRawPath.addRoundRect(
-            RoundRect(
-                rect = Rect(
-                    left = center.x + sideInnerStemOffset,
-                    top = crossbarTopY - sideTopH,
-                    right = (center.x + sideInnerStemOffset) + sideSpanW,
-                    bottom = crossbarTopY
-                ),
-                cornerRadius = sideCorner
-            )
-        )
-        // Ranura inferior de la "A" derecha
-        cache.sideCutoutsRawPath.addRoundRect(
-            RoundRect(
-                rect = Rect(
-                    left = center.x + sideInnerStemOffset,
-                    top = crossbarBottomY,
-                    right = (center.x + sideInnerStemOffset) + sideSpanW,
-                    bottom = crossbarBottomY + sideBottomH
-                ),
-                cornerRadius = sideCorner
-            )
-        )
+            // Ventana superior izquierda
+            val leftStartDeg = 180f + degBar
+            val leftSweepDeg = degStem - degBar
+            cache.cutoutsPath.moveTo(cx - xStem, cy - yBar)
+            cache.cutoutsPath.lineTo(cx - dxBar, cy - yBar)
+            cache.cutoutsPath.arcTo(rInnerRect, leftStartDeg, leftSweepDeg, false)
+            cache.cutoutsPath.close()
 
-        // Recortar las ventanas laterales con el arco concéntrico interior (0.822 * R)
-        cache.sideCutoutsClippedPath.reset()
-        cache.sideCutoutsClippedPath.op(
-            cache.sideCutoutsRawPath,
-            cache.innerArchCirclePath,
-            PathOperation.Intersect
-        )
-        cache.allCutoutsPath.addPath(cache.sideCutoutsClippedPath)
+            // Ventana superior derecha
+            val rightStartDeg = -degBar
+            val rightSweepDeg = -(degStem - degBar)
+            cache.cutoutsPath.moveTo(cx + xStem, cy - yBar)
+            cache.cutoutsPath.lineTo(cx + dxBar, cy - yBar)
+            cache.cutoutsPath.arcTo(rInnerRect, rightStartDeg, rightSweepDeg, false)
+            cache.cutoutsPath.close()
+        }
     }
 
-    // 4. Terminación inferior de las patas curvas exteriores (en y = +0.49*R .. +0.55*R)
-    // Deja únicamente los 4 postes verticales interiores llegando hasta la base del círculo, igual al logo original
-    val cutYInner = center.y + radius * (1.02f - 0.53f * m)
-    val cutYOuter = center.y + radius * (1.04f - 0.49f * m)
-    val cutYBottom = center.y + radius * 1.08f
-    if (cutYBottom > cutYInner) {
-        val leftStemX = center.x - sideInnerStemOffset
-        val leftOuterX = center.x - radius * 1.08f
-        cache.allCutoutsPath.moveTo(leftStemX, cutYInner)
-        cache.allCutoutsPath.lineTo(leftOuterX, cutYOuter)
-        cache.allCutoutsPath.lineTo(leftOuterX, cutYBottom)
-        cache.allCutoutsPath.lineTo(leftStemX, cutYBottom)
-        cache.allCutoutsPath.close()
+    // 4. Ventanas inferiores laterales + terminación de las patas curvas exteriores en y = +0.50*R
+    val yLowerTop = cy + radius * (1.02f - 0.937f * ease)
+    val yCutInner = cy + radius * (1.02f - 0.53f * ease)
+    val yCutOuter = cy + radius * (1.04f - 0.49f * ease)
+    val yBottom = cy + radius * 1.08f
+    val rInnerLower = radius * 0.822f
 
-        val rightStemX = center.x + sideInnerStemOffset
-        val rightOuterX = center.x + radius * 1.08f
-        cache.allCutoutsPath.moveTo(rightStemX, cutYInner)
-        cache.allCutoutsPath.lineTo(rightOuterX, cutYOuter)
-        cache.allCutoutsPath.lineTo(rightOuterX, cutYBottom)
-        cache.allCutoutsPath.lineTo(rightStemX, cutYBottom)
-        cache.allCutoutsPath.close()
+    if (yBottom > yLowerTop + 0.5f) {
+        val dyTop = (yLowerTop - cy).coerceAtLeast(0f)
+        val dyCut = (yCutInner - cy).coerceAtLeast(dyTop)
+
+        if (dyTop < rInnerLower * 0.98f) {
+            val sinTop = (dyTop / rInnerLower).coerceAtMost(0.995f)
+            val sinCut = (dyCut / rInnerLower).coerceAtMost(0.995f)
+            val degTop = (asin(sinTop.toDouble()) * 180.0 / PI).toFloat()
+            val degCut = (asin(sinCut.toDouble()) * 180.0 / PI).toFloat()
+            val lowerArchRect = Rect(cx - rInnerLower, cy - rInnerLower, cx + rInnerLower, cy + rInnerLower)
+
+            // Corte inferior izquierdo
+            cache.cutoutsPath.moveTo(cx - xStem, yLowerTop)
+            cache.cutoutsPath.arcTo(lowerArchRect, 180f - degTop, -(degCut - degTop), false)
+            cache.cutoutsPath.lineTo(cx - radius * 1.08f, yCutOuter)
+            cache.cutoutsPath.lineTo(cx - radius * 1.08f, yBottom)
+            cache.cutoutsPath.lineTo(cx - xStem, yBottom)
+            cache.cutoutsPath.close()
+
+            // Corte inferior derecho
+            cache.cutoutsPath.moveTo(cx + xStem, yLowerTop)
+            cache.cutoutsPath.arcTo(lowerArchRect, degTop, degCut - degTop, false)
+            cache.cutoutsPath.lineTo(cx + radius * 1.08f, yCutOuter)
+            cache.cutoutsPath.lineTo(cx + radius * 1.08f, yBottom)
+            cache.cutoutsPath.lineTo(cx + xStem, yBottom)
+            cache.cutoutsPath.close()
+        }
     }
 
-    // Restar todas las cavidades del monograma AAA al cuerpo de la esfera
-    cache.morphMaskPath.op(cache.morphMaskPath, cache.allCutoutsPath, PathOperation.Difference)
+    cache.morphMaskPath.addPath(cache.cutoutsPath)
 }
 
-/**
- * Curva suave de transición para que la esfera y el logo esculpido tengan presencia definida
- * pero nunca se detengan bruscamente.
- */
 private fun smoothOrganicMorph(rawWave: Float): Float {
     val x = rawWave.coerceIn(0f, 1f)
-    // Curva S suave de quinto orden (Perlin smootherstep)
     return x * x * x * (x * (x * 6f - 15f) + 10f)
 }
 
