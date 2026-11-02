@@ -1,0 +1,844 @@
+# INSTRUCCIONES MAESTRAS PARA GEMINI — AMBIORIX PAY
+## Corrección integral del sistema de pagos Nequi, reservas y comunicación SMS entre dos locales
+
+Gemini: debes trabajar sobre el proyecto Android existente de **Ambiorix Pay**. Esta tarea consiste en modificar y corregir funciones, lógica de negocio, persistencia, comunicación entre dispositivos y pruebas automatizadas.
+
+**NO rediseñes la aplicación. NO cambies su apariencia. NO elimines funciones existentes.**
+
+El objetivo es solucionar definitivamente la coordinación de pagos Nequi entre dos establecimientos que reciben las mismas notificaciones bancarias: una heladería y una pizzería.
+
+No te limites a explicar cómo hacerlo ni a entregar pseudocódigo. Inspecciona el proyecto, identifica las clases y funciones reales involucradas, implementa los cambios en el código existente, agrega las pruebas necesarias y entrega el proyecto completo modificado.
+
+---
+
+# 1. REGLA ABSOLUTA: NO CAMBIAR EL DISEÑO VISUAL
+
+Está terminantemente prohibido realizar cambios estéticos que no sean indispensables para incorporar las nuevas funciones.
+
+Conserva exactamente como están actualmente:
+
+- Colores, temas y fondos.
+- Tipografías, tamaños de texto y estilos.
+- Iconos existentes.
+- Botones existentes, su apariencia, tamaños y posiciones.
+- Tarjetas, bordes, esquinas y sombras.
+- Márgenes, espaciados y distribución de los componentes.
+- Navegación y estructura visual de las pantallas.
+- Animaciones actuales, salvo que sea estrictamente necesario corregir su comportamiento funcional.
+- Pantallas de productos, categorías, combos, recetas, inventario, perfiles de cajero, ventas e historial.
+- Identidad visual y marca Ambiorix Pay.
+
+No sustituyas componentes existentes por otros solo porque te parezcan mejores. No modernices la interfaz. No cambies textos o iconos ajenos a esta tarea.
+
+Solo puedes incorporar los botones, estados, indicadores de sincronización y elementos funcionales estrictamente necesarios para implementar estos requisitos. Deben integrarse en el diseño actual, respetando sus estilos.
+
+Antes de modificar el proyecto, identifica cómo están construidos los componentes actuales y reutilízalos.
+
+# 2. CONTEXTO REAL DEL NEGOCIO
+
+Hay dos celulares Android independientes:
+
+**Dispositivo A: HELADERÍA**
+
+- Ejecuta Ambiorix Pay configurado para la heladería.
+- Recibe las notificaciones SMS de Nequi Negocios.
+- Permite registrar órdenes y cobrar a los clientes.
+- Debe comunicar sus reservas, cancelaciones y asignaciones al otro dispositivo mediante SMS.
+
+**Dispositivo B: PIZZERÍA**
+
+- Ejecuta Ambiorix Pay configurado para la pizzería.
+- También recibe las mismas notificaciones SMS de Nequi Negocios.
+- Permite registrar sus propias órdenes y cobros.
+- Debe comunicarse con la heladería mediante SMS.
+
+Ambos números están registrados en Nequi Negocios, por lo que la misma notificación bancaria puede llegar a los dos teléfonos.
+
+Este es el problema que debemos resolver: cuando llega un pago, no siempre se sabe si pertenece a la heladería o a la pizzería.
+
+La solución consiste en mantener reservas de cobro coordinadas mediante SMS, comparar el valor exacto y los datos disponibles de la notificación bancaria, y disponer de un mecanismo de asignación manual cuando no exista una reserva que permita identificar el local.
+
+**No se dispone de un servidor propio. La comunicación entre los celulares debe funcionar mediante SMS en esta versión.** No implementes MQTT, Firebase, un servidor web ni otros servicios de infraestructura como sustitutos de esta comunicación.
+
+Diseña internamente el protocolo de forma que en una futura versión pueda cambiarse el transporte SMS por Wi-Fi o Internet sin reescribir la lógica de negocio.
+
+# 3. PRIMER PASO: AUDITAR EL PROYECTO EXISTENTE
+
+Antes de programar:
+
+1. Inspecciona la estructura completa del proyecto.
+2. Identifica el lenguaje, versión de Android, Gradle, dependencias y arquitectura actual.
+3. Localiza la pantalla de órdenes, el modal de cobro y el flujo que confirma las ventas.
+4. Localiza el código que crea reservas y envía SMS.
+5. Localiza el receptor de notificaciones bancarias de Nequi.
+6. Localiza el almacenamiento de transacciones, historial y estados de pagos.
+7. Localiza las funciones que registran las ventas y descuentan el inventario.
+8. Localiza la configuración que distingue a la heladería de la pizzería.
+9. Inspecciona las pruebas existentes y sus fallos.
+10. Identifica si hay rutas de ejecución diferentes que puedan confirmar una venta sin verificar el pago.
+
+No supongas que las clases o funciones tienen nombres específicos. Busca las implementaciones reales del proyecto.
+
+Reutiliza las estructuras existentes cuando sea posible. Evita duplicar repositorios, tablas, servicios o funciones que ya cumplen el mismo propósito.
+
+No borres código existente sin demostrar que es obsoleto y que su eliminación no rompe ninguna función.
+
+# 4. RESERVA OBLIGATORIA CUANDO SE ELIGE NEQUI
+
+Cuando un cajero esté en la sección de órdenes, tenga una orden lista para cobrar y seleccione Nequi, la aplicación debe crear una reserva de pago.
+
+La reserva debe incluir como mínimo:
+
+- Identificador único de reserva.
+- Identificador único de la orden.
+- Identificador del dispositivo.
+- Identificador del local: HELADERÍA o PIZZERÍA.
+- Valor exacto esperado en COP, representado como entero en pesos.
+- Fecha y hora de creación.
+- Estado actual de la reserva.
+- Versión del protocolo de comunicación.
+- Identificador de la operación o mensaje relacionado, cuando corresponda.
+
+La reserva se debe guardar de manera persistente antes de intentar enviar el SMS.
+
+Después, el dispositivo que crea la reserva debe enviar un SMS al otro celular.
+
+Ejemplo ilustrativo:
+
+`AMBIPAY|RESERVE|v=1|id=H-20261026-001|order=ORD-123|src=HELADERIA|amount=32500|currency=COP|ts=1793025130000`
+
+Este formato es ilustrativo. Implementa un formato compacto, seguro y compatible con los límites reales de los SMS.
+
+El otro dispositivo debe:
+
+1. Validar el mensaje.
+2. Comprobar que el destinatario y el local de origen son válidos.
+3. Guardar la reserva recibida de manera persistente.
+4. Evitar duplicarla si el SMS se recibe más de una vez.
+5. Confirmar la recepción mediante un ACK técnico.
+6. Mantener la reserva activa hasta recibir un evento válido de finalización, cancelación u otra transición permitida.
+
+El dispositivo que originó la reserva debe guardar si el mensaje está pendiente de envío, enviado o reconocido por el otro dispositivo.
+
+**No confundas el envío de un SMS con la recepción efectiva del mensaje por el otro teléfono.**
+
+Si falla el envío, la reserva debe seguir guardada localmente y el sistema debe reintentar de forma segura. La interfaz debe informar que la sincronización está pendiente.
+
+# 5. RESERVAS SIMULTÁNEAS Y COORDINACIÓN ENTRE LOCALES
+
+Cada dispositivo debe poder mantener múltiples reservas identificadas individualmente.
+
+No utilices una única variable global que permita que una nueva reserva sobrescriba otra.
+
+Una reserva de la heladería por $32.500 debe quedar identificada como perteneciente a la heladería. La pizzería debe saber que existe esa reserva y evitar atribuirse automáticamente una notificación que pueda corresponder a ella.
+
+La misma regla debe funcionar cuando la pizzería crea una reserva y la heladería recibe el SMS.
+
+La aplicación debe contemplar:
+
+- Reservas locales.
+- Reservas recibidas del otro dispositivo.
+- Reservas cuyo SMS todavía no se ha enviado.
+- Reservas enviadas sin confirmación de recepción.
+- Reservas sincronizadas.
+- Reservas canceladas.
+- Reservas completadas.
+- Reservas expiradas.
+- Reservas que requieren conciliación manual.
+
+No permitas que dos dispositivos se adjudiquen automáticamente la misma notificación.
+
+Si existen dos reservas activas del mismo valor y no hay información bancaria adicional que permita distinguirlas, la aplicación debe marcar el caso como ambiguo. No selecciones una reserva al azar.
+
+## 5.1. Problema de los SMS retrasados
+
+Un SMS puede tardar en llegar, fallar o llegar después de otro mensaje.
+
+Por ello, si un dispositivo no sabe si el otro ya recibió una reserva o una cancelación, no debe asumir que ambos tienen el mismo estado.
+
+Implementa un estado de sincronización explícito.
+
+Cuando haya una reserva potencialmente conflictiva y no se pueda confirmar la sincronización, guarda la notificación para revisión manual en lugar de atribuirla automáticamente.
+
+Los mensajes deben incluir identificadores únicos y, cuando sea necesario, una secuencia o versión que permita rechazar mensajes antiguos que pretendan reactivar estados ya finalizados.
+
+La secuencia no debe provocar que se descarten notificaciones bancarias reales; debe utilizarse para resolver el estado de la reserva y la comunicación entre dispositivos.
+
+# 6. NOTIFICACIÓN BANCARIA DE NEQUI: CÓMO DEBE PROCESARSE
+
+Cuando Android reciba un SMS de Nequi, la aplicación debe determinar si se trata de una notificación bancaria y no de un mensaje de coordinación de Ambiorix Pay.
+
+El receptor debe:
+
+1. Identificar los mensajes bancarios mediante criterios fiables basados en el remitente y el formato de la notificación.
+2. Extraer el valor recibido cuando el formato lo permita.
+3. Extraer el nombre del remitente, la referencia bancaria y la hora, si realmente están disponibles.
+4. Guardar la notificación original y los datos extraídos necesarios para la auditoría.
+5. Calcular un identificador estable para impedir que la misma notificación sea procesada dos veces.
+6. Consultar las reservas activas, las canceladas recientemente y los eventos de sincronización relacionados.
+7. Determinar si existe una coincidencia inequívoca.
+8. Vincular la notificación con la reserva correcta o guardarla como pendiente de asignación.
+
+No inventes información que no aparezca en el SMS.
+
+No consideres que dos mensajes son la misma transferencia únicamente porque tengan el mismo valor. Tampoco supongas que dos pagos del mismo valor corresponden necesariamente a una misma reserva.
+
+Si no se puede determinar con seguridad que dos notificaciones representan el mismo evento bancario, conserva sus registros y utiliza los datos disponibles para la conciliación.
+
+**La notificación bancaria es la evidencia del pago que recibe la aplicación. Los comandos SMS internos nunca son evidencia de que el dinero llegó.**
+
+# 7. COMPARACIÓN MEDIANTE RESERVA Y VALOR EXACTO
+
+La reserva debe permitir comparar al menos:
+
+- ID de reserva.
+- Local de origen.
+- Valor exacto esperado.
+- Hora de creación.
+- Estado de la reserva.
+- Hora y valor de la notificación bancaria.
+- Referencia bancaria o nombre del remitente, si están disponibles.
+
+El ID de reserva no suele aparecer dentro del SMS bancario. Por tanto, no afirmes que el banco lo incluye ni intentes buscarlo en una notificación que no lo contiene.
+
+El ID sirve para coordinar ambos dispositivos y vincular la decisión tomada sobre una notificación.
+
+El valor exacto sirve como criterio de coincidencia, pero no es suficiente por sí solo para demostrar a qué local pertenece un pago.
+
+Reglas:
+
+- Si solo hay una reserva elegible y el valor coincide exactamente, se puede identificar esa reserva como candidata.
+- Si el valor no coincide, no confirmes la reserva automáticamente.
+- Si hay varias reservas con el mismo valor, pide revisión manual.
+- Si la reserva está cancelada, no la reactives automáticamente.
+- Si el SMS bancario no permite extraer el valor, deja el evento pendiente de revisión.
+- Si la notificación no tiene suficientes datos para vincularse a una orden, no registres una venta automáticamente.
+- Si existe una contradicción entre el estado local y el estado sincronizado, no confirmes automáticamente.
+
+No asumas que la comparación por valor resuelve todos los casos. Debe existir una ruta de revisión manual para las situaciones ambiguas.
+
+# 8. PANTALLA DE ESPERA AL CONFIRMAR EL COBRO NEQUI
+
+Cuando el cajero confirme que desea iniciar el cobro por Nequi, debe aparecer la pantalla de espera que corresponda al diseño existente.
+
+Conserva el modal actual. Solo incorpora o corrige las funciones necesarias.
+
+La pantalla debe mostrar:
+
+- Estado de espera.
+- Valor exacto.
+- Identificador de reserva o referencia legible.
+- Estado de comunicación con el otro dispositivo, cuando sea relevante.
+- Estado de recepción de la notificación bancaria.
+- Botón «Dejar pendiente», si no existe ya uno equivalente.
+- Botón «Cancelar».
+- Botón «Cambiar a efectivo».
+
+No registres la venta como pagada por el simple hecho de que se abra esta pantalla.
+
+No registres la venta porque se haya enviado un SMS.
+
+No registres la venta porque el otro dispositivo haya enviado un ACK.
+
+No registres la venta porque se haya creado una reserva.
+
+La animación debe indicar que el sistema está esperando, no que el pago ya fue exitoso.
+
+# 9. BOTÓN «DEJAR PENDIENTE»
+
+Este botón permite conservar una operación cuyo pago todavía no se ha identificado.
+
+Al pulsarlo:
+
+1. Mantén la reserva guardada.
+2. Conserva el valor esperado.
+3. Conserva la orden y sus productos.
+4. No registres la venta como pagada.
+5. No descuentes inventario por una venta no confirmada.
+6. Conserva el estado de comunicación con el otro dispositivo.
+7. Permite recuperar la operación posteriormente desde el lugar apropiado de la aplicación.
+8. Si la interfaz cierra el modal o permite volver a otras pantallas, la operación debe seguir siendo recuperable.
+9. Si llega la notificación después, el sistema debe poder vincularla a la reserva si la coincidencia es inequívoca.
+10. No crees una segunda venta al reabrir la operación.
+
+La aplicación debe distinguir entre dejar pendiente una operación y cancelarla.
+
+Dejar pendiente no debe enviar un comando de cancelación.
+
+# 10. BOTÓN «CANCELAR»
+
+El botón debe cancelar el cobro en curso sin destruir la orden ni borrar sus productos.
+
+Cuando el cajero cancele:
+
+1. Marca la reserva como CANCELLED de manera persistente.
+2. Conserva el registro de la reserva para auditoría.
+3. Envía un SMS `CANCEL` al otro dispositivo.
+4. Incluye el ID original de reserva, local, valor, motivo y hora.
+5. El otro dispositivo marca esa reserva como cancelada.
+6. El otro dispositivo confirma la recepción mediante un ACK.
+7. Si el SMS no se envía, guarda el mensaje para reintentar.
+8. La aplicación debe indicar si la cancelación todavía no se ha sincronizado.
+9. No permitas que un mensaje RESERVE antiguo reactive la reserva cancelada.
+10. No registres la venta como pagada.
+
+Ejemplo:
+
+`AMBIPAY|CANCEL|v=1|id=H-20261026-001|src=HELADERIA|amount=32500|reason=USER_CANCEL|ts=1793025200000`
+
+La reserva cancelada debe permanecer disponible para resolver posibles notificaciones bancarias tardías.
+
+# 11. BOTÓN «CAMBIAR A EFECTIVO»
+
+Este botón debe estar disponible en la misma sección de espera del cobro Nequi.
+
+Cuando el cliente decide pagar en efectivo:
+
+1. Cancela o sustituye la reserva Nequi activa.
+2. Conserva el carrito completo y todos sus productos.
+3. Conserva el valor de la orden.
+4. Envía el SMS de cancelación al otro dispositivo.
+5. Marca la reserva como sustituida por efectivo.
+6. Cambia el flujo de cobro al método efectivo.
+7. Permite completar el cobro en efectivo mediante el flujo que ya existe.
+8. No borres productos, combos, recetas ni cantidades.
+9. No registres una venta Nequi accidental.
+10. No dupliques la venta cuando se complete el pago en efectivo.
+
+La cancelación de la reserva debe ocurrir de forma persistente antes de permitir una nueva operación de cobro incompatible.
+
+Si no se puede enviar el SMS inmediatamente, conserva la cancelación en la cola de salida y muestra que la sincronización está pendiente.
+
+No afirmes que el otro teléfono ya conoce la cancelación si todavía no se ha recibido el ACK correspondiente.
+
+El cobro en efectivo debe continuar según las reglas actuales de Ambiorix Pay, sin obligar al cajero a perder la orden porque el SMS falló.
+
+# 12. NOTIFICACIÓN TARDÍA DESPUÉS DE CANCELAR O CAMBIAR A EFECTIVO
+
+Este escenario es obligatorio.
+
+Ejemplo:
+
+- La heladería crea una reserva Nequi por $32.500.
+- La reserva se envía a la pizzería.
+- El cliente cambia de opinión y paga en efectivo.
+- La heladería cancela la reserva y registra correctamente la venta en efectivo.
+- Después llega el SMS de Nequi relacionado con un pago real por $32.500.
+
+La aplicación no debe:
+
+- Reactivar la reserva cancelada.
+- Registrar automáticamente una segunda venta.
+- Descontar inventario otra vez.
+- Ignorar el dinero recibido.
+- Eliminar la notificación.
+- Atribuir automáticamente el pago a la pizzería solo porque la reserva fue cancelada.
+
+Debe:
+
+1. Guardar la notificación.
+2. Vincularla a la reserva cancelada como candidata, si los datos disponibles lo permiten.
+3. Marcarla como pago tardío pendiente de conciliación.
+4. Alertar al cajero responsable.
+5. Permitir resolverla sin duplicar ventas.
+6. Conservar la trazabilidad del pago original y de la venta en efectivo.
+7. Si se determina que hubo una transferencia duplicada o un pago real posterior, mantener un registro de conciliación o devolución según corresponda.
+
+Cancelar un cobro en la aplicación no cancela una transferencia bancaria real.
+
+# 13. TRANSACCIONES QUE LLEGAN SIN NINGUNA RESERVA
+
+Este es un flujo central, no un caso secundario.
+
+Si llega una notificación de Nequi y ninguno de los dispositivos tiene una reserva activa que permita identificarla inequívocamente, ambos teléfonos deben guardar la transacción en sus respectivos historiales como pendiente de asignación.
+
+No deben sonar como si una venta propia estuviera confirmada.
+
+No deben registrar automáticamente una venta.
+
+No deben descontar inventario.
+
+No deben adjudicar el dinero por su cuenta.
+
+La notificación debe aparecer visualmente con el estado pendiente en amarillo, usando los componentes y estilos existentes de la aplicación.
+
+Cada registro debe contener, cuando esté disponible:
+
+- ID de la notificación.
+- Valor recibido.
+- Nombre del remitente.
+- Fecha y hora.
+- Referencia bancaria.
+- Datos de origen.
+- Estado de conciliación.
+- Estado de sincronización.
+- Identificador del registro del otro dispositivo, si existe.
+
+Si los datos bancarios son insuficientes, deben conservarse los datos originales necesarios para la revisión.
+
+La notificación no se debe borrar cuando el cajero abandona el historial ni cuando se reinicia el teléfono.
+
+# 14. ASIGNACIÓN MANUAL DESDE EL HISTORIAL
+
+Al abrir una transacción pendiente de asignación, deben aparecer dos acciones:
+
+- «Este local».
+- «El otro local».
+
+Respeta el diseño actual y añade únicamente los controles necesarios.
+
+## 14.1. El cajero elige «Este local»
+
+El dispositivo debe:
+
+1. Verificar que la transacción todavía esté pendiente.
+2. Verificar que no haya sido asignada previamente a otro local.
+3. Guardar la decisión de asignación.
+4. Registrar qué cajero tomó la decisión y cuándo, si el sistema actual dispone de perfiles de cajero.
+5. Cambiar el estado de la transacción.
+6. Comunicar la asignación al otro dispositivo mediante SMS.
+7. Evitar que la misma notificación siga apareciendo como pendiente de asignación en ambos dispositivos.
+8. Conservar la trazabilidad del evento.
+
+Asignar una transacción a un local no debe significar automáticamente que exista una venta correspondiente.
+
+Si la notificación corresponde a una orden que no se puede identificar, debe permanecer pendiente de conciliación con una venta.
+
+## 14.2. El cajero elige «El otro local»
+
+El dispositivo de origen debe enviar un SMS que identifique de forma inequívoca la transacción.
+
+Ejemplo:
+
+`AMBIPAY|ASSIGN|v=1|tx=TX-ABC123|src=HELADERIA|dst=PIZZERIA|amount=18000|bankts=1793027220000`
+
+El protocolo debe incluir la información real disponible. Si el nombre del remitente o la referencia bancaria existen, inclúyelos cuando sea posible y apropiado; no inventes valores.
+
+El dispositivo de destino debe:
+
+1. Recibir el comando.
+2. Validarlo.
+3. Buscar la notificación bancaria correspondiente.
+4. Comprobar que no haya sido asignada previamente.
+5. Guardar la asignación al local de destino.
+6. Evitar duplicar el evento si el mensaje se recibe más de una vez.
+7. Confirmar la recepción mediante `ASSIGN_ACK`.
+8. Actualizar su historial.
+9. Dejar de mostrar esa transacción como pendiente de asignación.
+10. Conservar su trazabilidad.
+
+El dispositivo de origen debe marcar la operación como enviada y, cuando reciba el ACK, como reconocida por el destino.
+
+Si no encuentra la notificación correspondiente, no debe inventar una transacción bancaria ni registrar una venta. Debe guardar una asignación pendiente de sincronización y solicitar el envío de los datos necesarios.
+
+## 14.3. Si ambos cajeros intentan asignar el mismo pago
+
+No permitas que las dos decisiones produzcan dos asignaciones definitivas.
+
+Utiliza un identificador estable del evento bancario, estados de asignación y confirmaciones.
+
+Si los dispositivos están desconectados o hay decisiones incompatibles que no se pueden resolver con certeza, marca el evento para conciliación manual. No inventes un sistema de exclusión mutua que garantice resultados imposibles cuando ambos teléfonos están sin comunicación.
+
+# 15. PROTOCOLO COMPLETO DE COMANDOS SMS
+
+Implementa un protocolo centralizado, con nombres constantes y validación estricta. No disperses cadenas mágicas por diferentes clases.
+
+Los comandos funcionales requeridos son:
+
+**`RESERVE`**
+
+Anuncia una reserva nueva. Incluye ID, local, orden, valor, hora y versión del protocolo.
+
+**`RESERVE_ACK`**
+
+Confirma que el otro dispositivo guardó la reserva. No significa que haya llegado dinero.
+
+**`CANCEL`**
+
+Cancela una reserva existente. Incluye el ID original, local, valor, motivo y hora.
+
+**`CANCEL_ACK`**
+
+Confirma que el otro dispositivo guardó la cancelación. No cancela transferencias bancarias.
+
+**`PAYMENT_CANDIDATE`**
+
+Comunica que una notificación bancaria parece coincidir con una reserva. No confirma el pago por sí solo.
+
+**`COMPLETE`**
+
+Comunica que una operación fue finalizada por el dispositivo responsable después de verificar la notificación bancaria o completar el procedimiento de confirmación manual permitido.
+
+**`COMPLETE_ACK`**
+
+Confirma que el otro dispositivo guardó el estado final comunicado.
+
+**`ASSIGN`**
+
+Solicita asignar una notificación sin reserva al otro local.
+
+**`ASSIGN_ACK`**
+
+Confirma que la asignación fue guardada por el destino.
+
+**`STATUS`**
+
+Solicita el estado actual de una reserva, notificación o asignación.
+
+**`STATUS_RESPONSE`**
+
+Devuelve el estado persistido correspondiente.
+
+**`RECONCILE`**
+
+Permite resolver divergencias entre estados locales y eventos pendientes de sincronización.
+
+**`ACK`**
+
+Confirma la recepción técnica de un mensaje cuando el protocolo lo necesite. Nunca representa un pago confirmado.
+
+Puedes añadir comandos auxiliares si son necesarios, pero documenta cada uno y no alteres las responsabilidades anteriores.
+
+Cada mensaje debe llevar un ID único de mensaje, versión de protocolo y el identificador de negocio correspondiente.
+
+Todos los comandos deben tener validación de campos, gestión de duplicados, manejo de mensajes antiguos y confirmación de recepción.
+
+Los ACK deben referenciar el ID del mensaje que reconocen.
+
+No envíes respuestas infinitas: los ACK no deben provocar nuevos ACK recursivos. Define claramente qué mensajes requieren confirmación.
+
+# 16. ESTADOS DE NEGOCIO
+
+Define estados explícitos y transiciones válidas para reservas, notificaciones, asignaciones y ventas.
+
+Como mínimo, contempla estos estados conceptuales:
+
+## Reservas
+
+- `CREATED`
+- `PENDING_SEND`
+- `SENT`
+- `ACKNOWLEDGED`
+- `ACTIVE`
+- `CANCELLED`
+- `REPLACED_BY_CASH`
+- `PAYMENT_CANDIDATE`
+- `COMPLETED`
+- `EXPIRED`
+- `REQUIRES_REVIEW`
+
+## Notificaciones bancarias
+
+- `RECEIVED`
+- `PARSED`
+- `UNASSIGNED`
+- `MATCH_CANDIDATE`
+- `ASSIGNED`
+- `RECONCILIATION_PENDING`
+- `LINKED_TO_SALE`
+- `DUPLICATE_EVENT`
+- `REQUIRES_REVIEW`
+
+## Sincronización
+
+- `NOT_SENT`
+- `PENDING_SEND`
+- `SENT`
+- `ACKNOWLEDGED`
+- `RETRY_PENDING`
+- `FAILED_REQUIRES_ATTENTION`
+
+Puedes adaptar estos nombres al modelo existente, pero no elimines las distinciones funcionales.
+
+No uses un solo estado genérico `PENDING` para representar situaciones que requieren comportamientos diferentes.
+
+Define transiciones explícitas y rechaza transiciones inválidas. Una reserva cancelada no puede pasar a activa por recibir un mensaje antiguo.
+
+# 17. REGLAS DE REGISTRO DE VENTAS E INVENTARIO
+
+Esta sección es crítica.
+
+Busca todos los caminos de código que pueden confirmar una venta.
+
+La venta debe registrarse exactamente una vez cuando se cumpla la condición de pago correspondiente.
+
+Para Nequi:
+
+- La reserva no es un pago.
+- El SMS interno no es un pago.
+- `ACK` no es un pago.
+- `RESERVE_ACK` no es un pago.
+- `PAYMENT_CANDIDATE` no es un pago.
+- La mera llegada a la pantalla de espera no es un pago.
+
+La confirmación automática requiere una notificación bancaria real que pueda vincularse de manera inequívoca según las reglas anteriores.
+
+Si el sistema ya permite una confirmación manual del cajero, conserva esa función o incorpórala de forma explícita y auditable: debe indicar que el cajero verificó realmente la recepción del dinero. No debe simular un SMS bancario ni fingir una confirmación automática.
+
+La aplicación debe registrar una venta y descontar el inventario de manera atómica o mediante un mecanismo transaccional equivalente que impida duplicados.
+
+Implementa idempotencia basada en identificadores estables de operación. No dependas únicamente de deshabilitar un botón.
+
+Si el proceso se ejecuta dos veces, si se repite un SMS o si se reinicia la aplicación a mitad del proceso, no deben producirse dos ventas ni dos descuentos.
+
+Conserva correctamente:
+
+- Productos individuales.
+- Combos.
+- Recetas y consumo de ingredientes.
+- Cantidades y unidades.
+- Descuentos.
+- Precios.
+- Inventario.
+- Historial de ventas.
+- Métodos de pago.
+- Perfiles de cajero.
+
+No rompas las reglas actuales de inventario al implementar la nueva lógica.
+
+# 18. EFECTIVO Y COMPATIBILIDAD CON EL FLUJO EXISTENTE
+
+La opción efectivo debe seguir funcionando como lo hace actualmente, excepto por la corrección necesaria para conservar la orden al cambiar desde Nequi.
+
+Verifica que:
+
+- No se duplique una venta por pulsar varias veces.
+- No se descuente inventario dos veces.
+- Cambiar de Nequi a efectivo no cree dos ventas.
+- El carrito no se vacíe antes de que la venta en efectivo se complete correctamente.
+- Una reserva cancelada no vuelva a completar automáticamente el cobro.
+- Las ventas en efectivo sigan apareciendo correctamente en los informes e historial.
+- Los totales y descuentos actuales sigan funcionando.
+- Las demás funciones de Ambiorix Pay continúen operativas.
+
+# 19. PERSISTENCIA, REINICIOS Y COLAS DE SMS
+
+No guardes las reservas únicamente en variables de memoria.
+
+Después de cerrar o reiniciar cualquiera de los teléfonos, la aplicación debe recuperar:
+
+- Reservas activas.
+- Reservas canceladas.
+- Notificaciones bancarias pendientes.
+- Notificaciones asignadas.
+- Estados de sincronización.
+- Mensajes SMS pendientes de envío.
+- Mensajes que esperan ACK.
+- Operaciones de venta ya procesadas.
+- Registros de auditoría necesarios para impedir duplicados.
+
+Utiliza la base de datos y las herramientas de persistencia que ya existan en el proyecto. Si es necesario ampliarlas, crea migraciones compatibles con los datos anteriores.
+
+No borres ni reinicies las ventas existentes ni los datos de inventario.
+
+Implementa reintentos con límites razonables y espera progresiva. Los mensajes deben conservar su ID original durante los reintentos.
+
+No elimines automáticamente mensajes pendientes de sincronización solo porque haya pasado cierto tiempo.
+
+Si una reserva expira, la aplicación debe marcarla para revisión o expiración según la política definida, conservando el historial. Un pago bancario tardío debe poder detectarse y conciliarse.
+
+# 20. PERMISOS Y SEGURIDAD DE LOS SMS
+
+Inspecciona el sistema actual de recepción y envío de SMS.
+
+Verifica los permisos y restricciones de Android según el target SDK y el mecanismo de distribución de la aplicación.
+
+No solicites permisos innecesarios ni cambies el target SDK sin justificación.
+
+Si el sistema requiere permisos especiales para leer SMS, recibirlos o enviarlos, explica sus requisitos y el mecanismo de autorización apropiado.
+
+No asumas que una aplicación puede leer todos los SMS sin permisos o restricciones de plataforma.
+
+Valida que los mensajes entrantes de coordinación sean coherentes con el dispositivo y el local esperados. No permitas que un mensaje arbitrario pueda marcar una venta como pagada.
+
+Si es viable en la arquitectura actual, autentica los comandos entre dispositivos mediante un mecanismo criptográfico compartido, con protección contra repetición. No confundas la autenticación del mensaje con la verificación del pago.
+
+Los comandos deben tener límites de tamaño y validación de entrada para evitar fallos por mensajes malformados.
+
+# 21. HABLA Y ESCUCHA: PREPARACIÓN PARA LA FUTURA VERSIÓN
+
+La versión actual debe seguir usando SMS.
+
+No implementes ahora una infraestructura de Wi-Fi ni un servidor.
+
+Sin embargo, separa la lógica de negocio de la capa de transporte. Define una interfaz interna clara para enviar y recibir mensajes de coordinación.
+
+La futura versión debe poder utilizar otro transporte, por ejemplo Wi-Fi o Internet, sin cambiar las reglas de reservas, conciliación, estados ni idempotencia.
+
+La comunicación debe funcionar en ambos sentidos:
+
+- Heladería hacia pizzería.
+- Pizzería hacia heladería.
+
+Ambos dispositivos deben poder enviar reservas, cancelaciones, asignaciones y solicitudes de estado.
+
+No hagas una arquitectura que solo permita que la heladería sea el dispositivo principal.
+
+# 22. PRUEBAS AUTOMATIZADAS OBLIGATORIAS
+
+Agrega o corrige pruebas unitarias y de integración de acuerdo con la arquitectura del proyecto.
+
+No te limites a comprobar que el código compila.
+
+## A. Reservas
+
+1. La heladería crea una reserva por $32.500.
+2. El mensaje contiene el valor correcto.
+3. La pizzería guarda la reserva.
+4. Un SMS duplicado no duplica la reserva.
+5. La pizzería puede crear su propia reserva.
+6. Dos reservas diferentes no se sobrescriben.
+7. Dos reservas del mismo valor se consideran ambiguas cuando no existe suficiente evidencia para diferenciarlas.
+
+## B. Notificaciones Nequi
+
+8. Una notificación coincide con una única reserva válida.
+9. Una notificación de valor diferente no confirma la reserva.
+10. Una notificación sin valor extraíble queda pendiente.
+11. Una notificación sin reserva se guarda en ambos historiales.
+12. La misma notificación no produce dos ventas.
+13. Dos transferencias reales distintas del mismo valor no se fusionan automáticamente.
+14. Una notificación no se considera un pago si solo se recibe un comando interno.
+15. Los datos bancarios no disponibles no se inventan.
+
+## C. Cancelación
+
+16. Cancelar una reserva cambia su estado de manera persistente.
+17. La cancelación se comunica al otro dispositivo.
+18. Un SMS de cancelación duplicado es idempotente.
+19. Un mensaje RESERVE antiguo no reactiva una reserva cancelada.
+20. Una notificación tardía después de cancelar queda pendiente de conciliación.
+21. Una cancelación no elimina la orden ni sus productos.
+
+## D. Cambio a efectivo
+
+22. Cambiar a efectivo conserva el carrito.
+23. Cambiar a efectivo cancela o sustituye la reserva Nequi.
+24. La venta en efectivo se registra una sola vez.
+25. La notificación Nequi tardía no crea una segunda venta.
+26. El inventario no se descuenta dos veces.
+27. Un fallo de SMS no destruye el flujo de cobro en efectivo.
+
+## E. Asignación manual
+
+28. Una transacción sin reserva queda pendiente de asignación.
+29. Elegir «Este local» la asigna una sola vez.
+30. Elegir «El otro local» genera el comando correcto.
+31. El destino encuentra la notificación original y la asigna.
+32. El destino no inventa una transacción si no encuentra el evento.
+33. `ASSIGN_ACK` actualiza el estado de sincronización.
+34. Un `ASSIGN` duplicado no duplica la asignación.
+35. Dos intentos incompatibles de asignación generan revisión, no dos asignaciones definitivas.
+
+## F. Sincronización y recuperación
+
+36. El SMS de reserva puede fallar y reintentarse.
+37. Los SMS pueden llegar desordenados.
+38. Los ACK duplicados no crean bucles.
+39. Un dispositivo puede reiniciarse y recuperar el estado.
+40. Los mensajes pendientes se conservan.
+41. Una sincronización incompleta no se presenta como sincronización exitosa.
+42. Los estados pueden reconciliarse mediante el protocolo.
+43. Los mensajes antiguos no sobrescriben un estado terminal válido.
+44. Una notificación bancaria tardía puede conciliarse sin reactivar indebidamente una venta.
+
+## G. Integridad de negocio
+
+45. Una venta confirmada descuenta el inventario exactamente una vez.
+46. Una reserva no descuenta inventario.
+47. Un pago pendiente no crea una venta confirmada.
+48. Una operación repetida no crea una segunda venta.
+49. Los combos y las recetas conservan su comportamiento.
+50. Las ventas en efectivo existentes siguen funcionando.
+51. Los productos, categorías, perfiles e historial existentes no se rompen.
+52. Los datos previos sobreviven a las migraciones de la base de datos.
+
+Si hay pruebas existentes que fallan, investiga la causa real. No desactives pruebas ni cambies sus expectativas únicamente para conseguir una compilación verde.
+
+# 23. REVISIÓN ESPECÍFICA DE FALLOS ANTERIORES
+
+En versiones anteriores se han observado problemas de compilación y pruebas relacionados con:
+
+- Una declaración de nivel superior inesperada en `PosRepository.kt`, cerca de la línea 2783.
+- Argumentos posicionales incorrectos de tipo numérico en llamadas a `createIngredient` dentro de `PosManagementTest.kt`.
+- Fallos en `testNoDuplicarVentasYTransaccionesDeCobro`.
+- Fallos en `testDescuentoRecursivoAlVenderCombo`.
+
+No asumas que estos errores siguen presentes en el ZIP actual. Inspecciona el código real y verifica si se han resuelto.
+
+Si siguen presentes, corrige la causa real sin debilitar la lógica de negocio ni las pruebas.
+
+No hagas que una prueba pase simplemente eliminando una validación de stock o cambiando una expectativa sin fundamento.
+
+# 24. COMPATIBILIDAD Y CALIDAD DEL CÓDIGO
+
+Conserva el lenguaje, el sistema de construcción y las dependencias existentes siempre que sea posible.
+
+No migres de Kotlin a Java ni de Jetpack Compose a otra tecnología.
+
+No añadas dependencias innecesarias.
+
+No dupliques la lógica de cobro en varios lugares.
+
+Centraliza el manejo de estados, transiciones y protocolo para evitar inconsistencias.
+
+Mantén compatibilidad con los datos de versiones anteriores.
+
+Maneja correctamente errores de base de datos, fallos de envío SMS, mensajes inválidos, falta de permisos y reinicios.
+
+Añade registros de diagnóstico útiles sin exponer datos personales o financieros innecesarios.
+
+# 25. CRITERIOS PARA DECLARAR QUE EL TRABAJO ESTÁ TERMINADO
+
+No declares que el problema está resuelto solo porque el proyecto compila.
+
+Debes comprobar:
+
+- La lógica de reservas y cancelaciones.
+- El emparejamiento de notificaciones.
+- El cambio de Nequi a efectivo.
+- La asignación manual desde el historial.
+- La sincronización de ambos dispositivos.
+- La prevención de duplicados.
+- La persistencia tras reinicios.
+- La compatibilidad con el inventario y los combos.
+- La conservación del diseño original.
+- Las pruebas automatizadas.
+- La generación del APK, si el entorno lo permite.
+
+Si no puedes ejecutar pruebas en dos teléfonos reales, indícalo claramente. Las pruebas unitarias no demuestran por sí solas que los SMS reales lleguen correctamente en dispositivos distintos.
+
+No afirmes que se han realizado pruebas que no se ejecutaron.
+
+No inventes resultados de compilación ni informes.
+
+# 26. ENTREGABLES
+
+Al finalizar, entrega:
+
+1. El proyecto Android completo modificado.
+2. Un ZIP descargable del proyecto, conservando todos los archivos necesarios para compilar.
+3. El APK de depuración si logras generarlo correctamente.
+4. La lista de archivos modificados y la función de cada cambio.
+5. Los nuevos comandos SMS y su formato.
+6. La explicación de los estados y las transiciones.
+7. El resultado real de las pruebas ejecutadas.
+8. Los errores pendientes, si existen.
+9. Los pasos para probarlo en la heladería y en la pizzería.
+10. Los permisos Android que necesitan los dispositivos.
+11. Una lista de pruebas manuales para confirmar que el dinero se atribuye al local correcto.
+12. Una confirmación explícita de si el diseño visual se conservó.
+
+No entregues solamente fragmentos de código ni instrucciones para que el usuario tenga que integrar manualmente todos los cambios.
+
+No elimines las funciones actuales de Ambiorix Pay.
+
+No cambies el diseño visual.
+
+No registres un pago sin evidencia bancaria o confirmación manual real y auditable.
+
+No atribuyas una notificación a un local si el sistema no tiene información suficiente para decidirlo.
+
+No permitas ventas duplicadas ni descuentos de inventario duplicados.
+
+**Prioridad máxima: que las reservas, la comunicación SMS, las cancelaciones, los pagos tardíos, la asignación manual y el registro de ventas sean correctos, sin alterar el aspecto de la aplicación.**

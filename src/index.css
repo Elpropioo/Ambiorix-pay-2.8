@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+@keyframes ambiorix888Glow {
+  0%, 100% {
+    opacity: 0.48;
+    text-shadow: 0 0 6px rgba(245, 158, 11, 0.25);
+  }
+  50% {
+    opacity: 0.94;
+    text-shadow: 0 0 16px rgba(245, 158, 11, 0.72), 0 0 28px rgba(251, 191, 36, 0.28);
+  }
+}
+
+@keyframes ambiorixSkeletonShimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.ambiorix-888-glow {
+  animation: ambiorix888Glow 3.2s ease-in-out infinite;
+}
+
+.ambiorix-skeleton-shimmer {
+  background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+  background-size: 200% 100%;
+  animation: ambiorixSkeletonShimmer 1.6s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ambiorix-888-glow {
+    animation: none;
+    opacity: 0.75;
+    text-shadow: 0 0 10px rgba(245, 158, 11, 0.35);
+  }
+  .ambiorix-skeleton-shimmer {
+    animation: none;
+    background: #1e293b;
+  }
+}

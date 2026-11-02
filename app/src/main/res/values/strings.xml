@@ -1,0 +1,12 @@
+<resources>
+    <string name="app_name">Ambiorix Pay</string>
+    <string name="notification_service_label">Detector de Pagos Ambiorix</string>
+    <string name="scan_to_pay_default">ESCANEA PARA PAGAR</string>
+    <string name="default_business_name">Mi Negocio</string>
+    <string name="default_additional_text">Verifica el nombre del negocio antes de transferir</string>
+    <string name="waiting_for_payment">Esperando pago...</string>
+    <string name="payment_received">PAGO RECIBIDO</string>
+    <string name="transaction_received">TRANSACCIÓN RECIBIDA</string>
+    <string name="detected_by">Detectado por</string>
+    <string name="warning_notification_access">El acceso a notificaciones está desactivado. Toca aquí para activarlo en Ajustes.</string>
+</resources>

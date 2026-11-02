@@ -1,0 +1,123 @@
+name: Build Ambiorix Pay APK
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Crear una GitHub Release con el APK'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build & Test APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Configure Android SDK & Accept Licenses (No obsolete 'tools' package)
+        run: |
+          export ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          export ANDROID_SDK_ROOT="${ANDROID_HOME}"
+          echo "ANDROID_HOME=${ANDROID_HOME}" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=${ANDROID_HOME}" >> $GITHUB_ENV
+
+          SDKMANAGER=$(find "${ANDROID_HOME}/cmdline-tools" -name sdkmanager -type f | head -n 1)
+          if [ -z "$SDKMANAGER" ]; then
+            SDKMANAGER=$(which sdkmanager || true)
+          fi
+
+          if [ -n "$SDKMANAGER" ]; then
+            yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+            "$SDKMANAGER" --install "platform-tools" "platforms;android-34" "build-tools;34.0.0" > /dev/null 2>&1 || true
+          fi
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Ensure Gradle Wrapper is executable
+        run: |
+          if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
+            gradle wrapper --gradle-version 8.9
+          fi
+          chmod +x gradlew
+
+      - name: Run Unit Tests
+        run: ./gradlew testDebugUnitTest --no-daemon --stacktrace
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Build Release APK
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
+
+      - name: Rename APKs for clear identification
+        run: |
+          mkdir -p final-apks
+          if [ -f app/build/outputs/apk/debug/app-debug.apk ]; then
+            cp app/build/outputs/apk/debug/app-debug.apk final-apks/AmbiorixPay-Debug.apk
+          fi
+          if [ -f app/build/outputs/apk/release/app-release.apk ]; then
+            cp app/build/outputs/apk/release/app-release.apk final-apks/AmbiorixPay-Release.apk
+          fi
+          ls -la final-apks/
+
+      - name: Upload Debug APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AmbiorixPay-Debug-APK
+          path: final-apks/AmbiorixPay-Debug.apk
+          if-no-files-found: warn
+
+      - name: Upload Release APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AmbiorixPay-Release-APK
+          path: final-apks/AmbiorixPay-Release.apk
+          if-no-files-found: warn
+
+      - name: Upload All APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: AmbiorixPay-All-APKs
+          path: app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
+
+      - name: Publish GitHub Release (on tag or manual release)
+        if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.create_release == true)
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            final-apks/AmbiorixPay-Debug.apk
+            final-apks/AmbiorixPay-Release.apk
+          name: Ambiorix Pay v2.7 GT (${{ github.ref_name }})
+          body: |
+            ## Ambiorix Pay 2.7 GT APK
+            Versión 2.7 compilada automáticamente con soporte para:
+            - Historial de Pagos con Calendario Mensual Interactivo y Acumulado Diario
+            - Gráfico de Barras de Movimiento Diario y Resumen Mensual
+            - Registro de Hora Exacta con Segundos (Zona Horaria de Colombia) y Nombre del Remitente
+            - Esqueletos de Carga (Skeleton Loaders) y Pie de Página Versión 2.7 (888)
+            - Servicio ENCENDIDO / APAGADO, Programación de Horarios Comerciales y Códigos QR (QR 1 y QR 2)
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

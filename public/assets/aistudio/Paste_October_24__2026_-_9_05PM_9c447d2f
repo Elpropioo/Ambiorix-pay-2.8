@@ -1,0 +1,1078 @@
+# PROYECTO COMPLETO: AMBIORIX POS
+## Sistema de punto de venta, inventario, recetas, caja, pagos y coordinación segura entre dos tiendas
+
+### 0. INSTRUCCIÓN PRINCIPAL
+
+Desarrolla Ambiorix POS, una aplicación Android de punto de venta para una heladería, con gestión de productos, recetas, ingredientes, inventario, compras, caja, ventas, usuarios, reportes y recepción de pagos mediante notificaciones SMS de Nequi.
+
+El proyecto debe incorporar un protocolo robusto de comunicación por SMS entre dos teléfonos Android que trabajan con la misma cuenta de Nequi y el mismo QR, pero pertenecen a dos tiendas físicas diferentes.
+
+Ambiorix POS debe funcionar localmente, sin depender de Internet, servidores externos, Firebase ni servicios en la nube para sus operaciones esenciales.
+
+**No construyas únicamente una demostración visual. El objetivo es una aplicación funcional, con persistencia real, lógica de negocio, validaciones, permisos, auditoría y pruebas.**
+
+Si existe un proyecto Android anterior de Ambiorix Pay, debes trabajar sobre ese proyecto y conservar las funcionalidades válidas. No reconstruyas la aplicación desde cero sin una razón técnica demostrable.
+
+Antes de modificar archivos:
+
+1. Inspecciona el proyecto y su estructura.
+2. Identifica el lenguaje, la versión de Android, el sistema de compilación, las dependencias y la arquitectura existentes.
+3. Localiza el motor de lectura y análisis de SMS bancarios.
+4. Localiza la pantalla verde de confirmación y su sonido.
+5. Identifica la base de datos, las entidades y las migraciones existentes.
+6. Identifica los permisos y los componentes que reciben SMS.
+7. Presenta un plan de integración.
+8. Implementa los cambios por módulos y comprueba que el proyecto compile.
+
+No reemplaces una función que ya funciona sin entenderla y sin preservar su comportamiento válido.
+
+Si falta algún dato, inspecciona el código y documenta la incertidumbre. No inventes funciones existentes ni declares terminado algo que solo tiene una interfaz visual.
+
+---
+
+# PARTE I. IDENTIDAD Y DISEÑO
+
+## 1. Nombre y propósito
+
+Nombre: Ambiorix POS.
+
+Es un sistema de punto de venta y administración para una heladería, integrado con el ecosistema de Ambiorix Pay.
+
+Debe permitir que el personal registre ventas rápidamente, controle los ingredientes consumidos, gestione el dinero de caja y consulte el historial de pagos.
+
+Debe ser sencillo para la cajera, pero ofrecer al propietario herramientas administrativas y controles detallados.
+
+## 2. Diseño visual
+
+Utiliza una identidad visual moderna y profesional.
+
+Estilo:
+- Tema oscuro, con fondos azul marino y superficies oscuras.
+- Detalles dorados y naranjas para acentos.
+- Contraste suficiente para trabajar durante muchas horas.
+- Botones grandes y claros en la pantalla de ventas.
+- Iconografía coherente.
+- Tarjetas y tablas legibles.
+- Indicadores de estado visuales y accesibles.
+- Animaciones discretas, sin afectar el rendimiento.
+
+La interfaz debe diferenciar claramente los estados:
+- Confirmado.
+- Pendiente.
+- Sin asignar.
+- En coordinación.
+- Cancelación pendiente.
+- Conflicto.
+- Error.
+- Requiere revisión.
+
+El color nunca debe ser la única manera de identificar un estado: también debe existir texto descriptivo.
+
+No muestres una confirmación verde de pago cuando la operación no haya superado las validaciones requeridas.
+
+## 3. Arquitectura y funcionamiento offline
+
+La aplicación debe funcionar sin conexión a Internet para sus operaciones locales.
+
+Utiliza la tecnología de persistencia compatible con el proyecto existente. Si corresponde, utiliza Room sobre SQLite.
+
+Las operaciones esenciales que deben funcionar offline incluyen:
+- Registro de ventas.
+- Catálogo de productos.
+- Recetas.
+- Inventario.
+- Compras.
+- Gastos.
+- Apertura y cierre de caja.
+- Usuarios y permisos locales.
+- Historial de pagos.
+- Reportes basados en los datos locales.
+- Registro de eventos y auditoría.
+
+La comunicación entre tiendas se realiza por SMS. La aplicación no debe necesitar una conexión de datos para enviar o recibir los comandos del protocolo, aunque Android, los permisos, la cobertura celular y el operador pueden imponer limitaciones.
+
+No introducir Firebase, una API remota ni un servidor obligatorio en esta versión.
+
+Diseñar el código de manera modular para que una futura versión pueda añadir sincronización centralizada, pero no implementar esa infraestructura ahora.
+
+---
+
+# PARTE II. USUARIOS, AUTENTICACIÓN Y PERMISOS
+
+## 4. Roles
+
+Implementar como mínimo dos roles.
+
+### Propietario o patrón
+
+Puede:
+- Consultar ventas e historial.
+- Ver ingresos, costos, ganancias y márgenes.
+- Crear y editar productos.
+- Configurar categorías, variantes, tamaños y precios.
+- Crear y editar recetas.
+- Configurar ingredientes y unidades.
+- Registrar compras y proveedores.
+- Gestionar inventario.
+- Registrar mermas y ajustes.
+- Consultar gastos y movimientos de caja.
+- Gestionar usuarios y permisos.
+- Autorizar excepciones administrativas.
+- Consultar reportes.
+- Gestionar las tiendas y los dispositivos autorizados.
+- Consultar el estado de comunicación y los conflictos.
+- Ejecutar las operaciones administrativas permitidas por el sistema.
+
+### Cajera
+
+Puede:
+- Abrir y utilizar el punto de venta.
+- Seleccionar productos y cantidades.
+- Aplicar los descuentos autorizados.
+- Registrar ventas.
+- Seleccionar métodos de pago.
+- Consultar el estado de sus operaciones.
+- Registrar pagos en efectivo.
+- Iniciar la coordinación de pagos por Nequi.
+- Consultar las transacciones necesarias para realizar su trabajo.
+- Registrar movimientos autorizados de caja.
+- Solicitar la revisión o reasignación de pagos.
+- Cerrar su turno según las reglas configuradas.
+
+No puede:
+- Ver las ganancias del negocio.
+- Consultar costos internos de ingredientes o productos.
+- Modificar recetas.
+- Cambiar precios libremente.
+- Alterar el inventario sin autorización.
+- Cambiar usuarios o permisos.
+- Modificar el historial financiero directamente.
+- Borrar ventas, pagos o eventos de auditoría.
+- Desactivar los controles de coordinación.
+
+Cuando una acción requiera autorización del propietario, implementar un procedimiento explícito que valide sus credenciales y registre quién autorizó la operación.
+
+## 5. Seguridad de acceso
+
+Implementar inicio de sesión mediante PIN y asociar las acciones a un usuario identificado.
+
+Requisitos:
+- No almacenar PIN en texto plano.
+- Utilizar almacenamiento seguro de credenciales cuando corresponda.
+- Limitar los intentos de acceso.
+- Registrar inicios de sesión y operaciones sensibles.
+- Bloquear o proteger la sesión tras un período configurable de inactividad.
+- Evitar que la cajera acceda a información administrativa mediante navegación alternativa.
+- Validar permisos en la lógica de negocio, no solo ocultando botones.
+- Registrar las autorizaciones administrativas y sus motivos.
+
+El acceso físico al teléfono no debe permitir saltarse los permisos simplemente abriendo otra pantalla.
+
+---
+
+# PARTE III. PUNTO DE VENTA
+
+## 6. Pantalla principal de ventas
+
+Crear una pantalla de venta optimizada para trabajar rápidamente.
+
+Debe incluir:
+- Categorías de productos.
+- Productos con fotografía cuando exista.
+- Nombre y precio.
+- Variantes, tamaños y presentaciones.
+- Adicionales y complementos.
+- Selector de cantidades.
+- Carrito de compra.
+- Subtotal.
+- Descuentos autorizados.
+- Total final en COP.
+- Eliminación de un artículo del carrito antes de confirmar la venta.
+- Cambio de cantidades.
+- Indicadores de disponibilidad cuando el inventario sea insuficiente.
+- Acceso claro al proceso de pago.
+
+Las imágenes son recursos visuales del catálogo; no deben determinar el precio ni la identidad del producto.
+
+El precio aplicado debe quedar registrado como una instantánea de la venta. Cambiar posteriormente el precio del catálogo no debe alterar ventas históricas.
+
+## 7. Catálogo y variantes
+
+Cada producto puede tener:
+- Identificador único.
+- Nombre.
+- Descripción.
+- Categoría.
+- Fotografía.
+- Estado activo o inactivo.
+- Precio de venta.
+- Variantes y tamaños.
+- Adicionales.
+- Receta asociada, cuando corresponda.
+- Reglas de disponibilidad.
+- Impuestos o cargos configurables, si el negocio los utiliza.
+
+Permitir desactivar productos sin borrar sus referencias históricas.
+
+Los precios deben expresarse en pesos colombianos, COP, y almacenarse utilizando una representación monetaria precisa, no cálculos de punto flotante que puedan producir errores de redondeo.
+
+## 8. Carrito y confirmación de venta
+
+Antes de confirmar una venta:
+- Validar que el carrito tenga artículos.
+- Validar cantidades.
+- Calcular los importes.
+- Aplicar las reglas de descuentos.
+- Comprobar la disponibilidad de ingredientes según las reglas de inventario.
+- Mostrar el total.
+- Permitir seleccionar el método de pago.
+
+La venta y sus detalles deben persistirse de forma coherente.
+
+Evitar que un doble toque en el botón de confirmar cree dos ventas.
+
+Una venta puede estar pendiente de pago, parcialmente pagada, pagada, cancelada o en proceso de revisión, según las reglas definidas.
+
+No registrar como cobrado un importe que no haya sido recibido o validado mediante el procedimiento correspondiente.
+
+---
+
+# PARTE IV. MÉTODOS DE PAGO
+
+## 9. Métodos admitidos
+
+Implementar:
+- Efectivo.
+- Nequi.
+- Transferencia bancaria.
+- Pago dividido entre varios métodos, cuando esté permitido.
+
+Registrar cada componente del pago de forma independiente, con importe, método, hora, usuario, estado y referencia disponible.
+
+La suma de los pagos debe reconciliarse con el total de la venta, considerando únicamente los importes que hayan sido registrados conforme a las reglas del método.
+
+No permitir que un pago pendiente se cuente como dinero confirmado.
+
+Para pagos divididos, mantener una relación entre la venta y cada uno de los componentes del pago.
+
+## 10. Efectivo
+
+Al registrar un pago en efectivo:
+- Registrar el importe recibido.
+- Calcular el cambio cuando corresponda.
+- Validar que el pago cubra el importe exigido.
+- Registrar el usuario.
+- Vincular el movimiento a la venta y a la caja activa.
+- Evitar contabilizar el mismo pago dos veces.
+
+No mezclar automáticamente pagos en efectivo con notificaciones bancarias.
+
+## 11. Nequi y transferencia
+
+Conservar e integrar el motor existente de análisis de SMS bancarios.
+
+No suponer que cualquier SMS que mencione dinero es una notificación válida de pago.
+
+Analizar los datos disponibles, entre ellos:
+- Importe.
+- Remitente.
+- Fecha y hora.
+- Fuente o canal.
+- Referencia de transacción, si está disponible.
+- Texto original de la notificación, protegido según las necesidades de auditoría.
+
+Registrar el evento bancario incluso cuando todavía no pueda asignarse a una venta.
+
+Separar claramente:
+1. Notificación recibida.
+2. Evento bancario registrado.
+3. Evento vinculado a una venta.
+4. Pago aceptado en la conciliación de Ambiorix.
+5. Confirmación visual de la operación.
+
+Un SMS bancario no es una prueba criptográfica del movimiento bancario. No prometer garantías que el sistema no puede demostrar.
+
+---
+
+# PARTE V. INVENTARIO DE INGREDIENTES Y RECETAS
+
+## 12. Ingredientes
+
+Crear un módulo de ingredientes con:
+- Identificador único.
+- Nombre.
+- Categoría.
+- Unidad de medida.
+- Cantidad disponible.
+- Costo unitario.
+- Proveedor habitual opcional.
+- Stock mínimo.
+- Fecha de vencimiento cuando corresponda.
+- Lotes.
+- Estado.
+- Historial de movimientos.
+
+Admitir unidades apropiadas para una heladería, como gramos, kilogramos, mililitros, litros y unidades.
+
+Implementar conversiones explícitas y validadas. No mezclar unidades incompatibles ni realizar conversiones ambiguas.
+
+## 13. Recetas
+
+Cada receta debe definir los ingredientes y las cantidades requeridas para elaborar un producto o una porción.
+
+Permitir:
+- Crear recetas.
+- Editarlas mediante nuevas versiones.
+- Definir cantidades por porción o lote.
+- Asociar recetas a productos y variantes.
+- Calcular costos a partir del costo vigente de los ingredientes.
+- Consultar el consumo estimado de ingredientes.
+- Identificar ingredientes insuficientes.
+
+Una venta histórica debe conservar la información de receta y costo que se utilizó para su registro, o una referencia inmutable suficiente para reconstruir ese cálculo.
+
+Cambiar una receta no debe reescribir el consumo histórico.
+
+## 14. Descuento automático de inventario
+
+Cuando una venta alcance el punto definido para considerar comprometido el inventario, generar los movimientos correspondientes de forma transaccional.
+
+No descontar ingredientes repetidamente si la aplicación recibe dos veces la misma confirmación de venta.
+
+Definir y documentar el momento de consumo:
+- Al confirmar una venta cobrada, o
+- Mediante una política explícita de reserva y liberación de existencias si el negocio la necesita.
+
+Si una venta se cancela antes de que exista consumo real, liberar o revertir el compromiso según su estado.
+
+Si el producto ya se elaboró y los ingredientes se consumieron, no fingir que los ingredientes regresaron al inventario. Registrar el desperdicio o ajuste correspondiente.
+
+## 15. Lotes, vencimientos y rotación
+
+Permitir registrar lotes con cantidades y fechas de vencimiento cuando sean relevantes.
+
+Implementar alertas de vencimiento y rotación FEFO: primero utilizar el lote cuya fecha de vencimiento sea más próxima, cuando resulte aplicable.
+
+El sistema debe poder mostrar:
+- Ingredientes próximos a vencer.
+- Ingredientes vencidos.
+- Existencias insuficientes.
+- Productos que no pueden prepararse por falta de ingredientes.
+
+No afirmar que un lote se ha consumido físicamente solo porque la aplicación lo sugiera. Las excepciones deben poder registrarse mediante movimientos auditables.
+
+## 16. Mermas, desperdicios y ajustes
+
+Registrar:
+- Ingrediente o producto afectado.
+- Cantidad.
+- Unidad.
+- Motivo.
+- Fecha y hora.
+- Usuario.
+- Costo asociado cuando corresponda.
+- Autorización necesaria según el rol.
+
+Distinguir entre consumo por ventas, producción, desperdicio, vencimiento, corrección de inventario y devolución válida.
+
+No eliminar movimientos históricos de inventario para corregir un error. Crear un movimiento de reversión o ajuste relacionado con el original.
+
+## 17. Compras y proveedores
+
+Implementar un módulo para:
+- Registrar proveedores.
+- Registrar compras de ingredientes.
+- Guardar cantidades, unidades y costos.
+- Registrar fecha y número de documento cuando exista.
+- Registrar lotes y vencimientos cuando corresponda.
+- Aumentar las existencias mediante movimientos de compra.
+- Consultar el historial de compras y cambios de costos.
+
+Evitar que una compra duplicada se registre dos veces por un doble toque o una repetición de operación.
+
+La recepción de mercancía debe distinguirse de la salida de dinero: una compra puede estar pendiente de pago, pagada o parcialmente pagada si el negocio requiere manejar esas situaciones.
+
+---
+
+# PARTE VI. CAJA Y TURNOS
+
+## 18. Apertura de caja
+
+Permitir abrir un turno con:
+- Usuario responsable.
+- Fecha y hora.
+- Tienda.
+- Importe inicial en efectivo.
+- Observaciones opcionales.
+
+Persistir la apertura antes de aceptar operaciones que dependan de esa caja.
+
+## 19. Movimientos de caja
+
+Registrar:
+- Ventas cobradas en efectivo.
+- Ingresos adicionales.
+- Gastos.
+- Retiros.
+- Devoluciones.
+- Ajustes autorizados.
+- Otros movimientos configurables.
+
+Cada movimiento debe tener:
+- Identificador único.
+- Importe.
+- Tipo.
+- Motivo.
+- Fecha y hora.
+- Usuario.
+- Caja y tienda.
+- Relación con la operación de origen.
+
+No mezclar automáticamente las transferencias bancarias con el efectivo físico de la caja.
+
+## 20. Gastos
+
+Permitir registrar gastos con:
+- Categoría.
+- Descripción.
+- Importe.
+- Método de pago.
+- Fecha.
+- Usuario.
+- Comprobante o referencia opcional.
+
+Un gasto pagado con efectivo debe afectar el efectivo esperado de la caja. Un gasto pagado mediante otro método debe registrarse sin reducir artificialmente el efectivo físico.
+
+No confundir un gasto con una merma de inventario.
+
+## 21. Cierre de caja
+
+Al cerrar un turno:
+- Calcular el efectivo esperado.
+- Permitir registrar el efectivo contado.
+- Calcular la diferencia.
+- Solicitar una explicación cuando exista discrepancia, según las reglas del propietario.
+- Mostrar un resumen de ventas por método de pago.
+- Mostrar ingresos, gastos, retiros y devoluciones.
+- Registrar quién realizó el cierre.
+- Conservar el historial de cierres.
+
+El efectivo esperado debe calcularse a partir de los movimientos válidos de caja, no simplemente sumando todos los pagos registrados.
+
+Una vez cerrado el turno, cualquier corrección debe realizarse mediante un evento administrativo autorizado, sin borrar el cierre original.
+
+---
+
+# PARTE VII. HISTORIAL, REPORTES Y RENTABILIDAD
+
+## 22. Historial de ventas
+
+Cada venta debe incluir:
+- ID único.
+- Fecha y hora.
+- Tienda.
+- Usuario.
+- Artículos y cantidades.
+- Precios unitarios históricos.
+- Descuentos.
+- Total.
+- Métodos e importes de pago.
+- Estado.
+- Referencias de transacciones vinculadas.
+- Movimientos de inventario relacionados.
+- Eventos de cancelación o corrección.
+
+Permitir consultar las ventas por fecha, estado, método de pago y usuario según los permisos.
+
+No permitir borrar ventas ni cambiar directamente sus importes históricos.
+
+## 23. Historial de pagos
+
+Crear una pantalla con filtros por:
+- Fecha.
+- Hora.
+- Importe.
+- Método.
+- Remitente.
+- Fuente.
+- Referencia.
+- Estado de asignación.
+- Venta asociada.
+- Tienda.
+- Dispositivo.
+
+Cada evento bancario debe tener su identidad persistente.
+
+Cuando se abra un evento, mostrar los datos disponibles y el estado de conciliación.
+
+Los eventos no asignados deben mostrar acciones como:
+- Pago recibido en esta tienda.
+- Envío a tienda equivocada.
+- Consultar estado.
+- Ver motivo del conflicto.
+
+Las acciones disponibles deben depender del rol y del estado de la transacción.
+
+## 24. Ganancias y costos
+
+Solo el propietario puede acceder a los costos internos y a los reportes de rentabilidad.
+
+Calcular y mostrar, cuando los datos sean suficientes:
+- Ventas brutas.
+- Descuentos.
+- Ventas netas según las reglas configuradas.
+- Costo estimado de productos vendidos.
+- Margen bruto.
+- Gastos.
+- Resultado estimado.
+- Consumo de ingredientes.
+- Productos más vendidos.
+- Movimientos de inventario.
+- Comparación por períodos.
+
+Distinguir el ingreso recibido del beneficio económico. Una transferencia bancaria recibida no equivale a ganancia neta.
+
+Documentar el método de valoración de inventario y costo de ventas utilizado.
+
+Si los costos o las recetas están incompletos, indicar que la rentabilidad es estimada o incompleta. No inventar datos para completar un reporte.
+
+## 25. Calendario
+
+Incluir un calendario o selector de períodos para consultar:
+- Ventas diarias.
+- Historial de pagos.
+- Cierres de caja.
+- Gastos.
+- Compras.
+- Mermas.
+- Vencimientos.
+- Resumen por día o período.
+
+Las fechas y horas deben almacenarse y mostrarse de forma coherente con la zona horaria configurada. Evitar que cambios de reloj o de zona horaria alteren silenciosamente la identidad de las transacciones.
+
+---
+
+# PARTE VIII. COORDINACIÓN ENTRE DOS TELÉFONOS POR SMS
+
+## 26. Objetivo
+
+Implementar un protocolo entre dos dispositivos Android independientes que utilizan la misma cuenta de Nequi y el mismo QR, pero pertenecen a tiendas diferentes.
+
+El protocolo debe funcionar mediante SMS, sin servidor y sin conexión de datos obligatoria.
+
+Cada dispositivo tiene:
+- `store_id`.
+- `device_id`.
+- Su propia base de datos.
+- Su propia SIM.
+- Una identidad autorizada.
+- La configuración necesaria para reconocer el otro dispositivo.
+
+La coordinación debe evitar, hasta donde lo permitan las limitaciones del transporte SMS, las confirmaciones duplicadas, la asignación incorrecta de pagos y los conflictos silenciosos.
+
+No afirmar que dos dispositivos comunicados por SMS pueden garantizar exclusión mutua perfecta bajo cualquier retraso, pérdida o desorden de mensajes. Ante incertidumbre, bloquear la operación normal y mostrar un estado pendiente o de conflicto.
+
+## 27. Independencia absoluta de la recepción bancaria
+
+La recepción y el registro de SMS bancarios nunca deben bloquearse por una reserva.
+
+Seguir procesando notificaciones bancarias aunque:
+- haya una reserva activa;
+- una reserva esté pendiente;
+- una reserva haya vencido;
+- exista una cancelación pendiente;
+- el otro teléfono esté apagado;
+- la coordinación haya fallado;
+- la cajera esté registrando otra venta;
+- existan pagos sin asignar.
+
+Guardar cada evento bancario de manera persistente antes de asignarlo.
+
+Una reserva controla la coordinación de una operación, no la recepción del dinero ni la llegada de notificaciones bancarias.
+
+## 28. Dos temporizadores distintos
+
+### Coordinación
+
+- Plazo inicial de 120 segundos.
+- Comienza al crear la solicitud `RESERVE`.
+- Los reintentos no reinician el plazo.
+- Si no llega una aceptación válida dentro del plazo, bloquear el flujo normal de pago por Nequi para esa operación.
+- No interpretar falta de respuesta como aceptación.
+
+### Espera del pago
+
+- Independiente de los 120 segundos.
+- Después de aceptar la reserva, esperar el pago conforme a una política configurable.
+- La política de espera debe distinguirse de la expiración de la solicitud de coordinación.
+- Si llega una notificación bancaria después de un vencimiento o cancelación, conservarla y conciliarla.
+- No cancelar ni borrar dinero recibido por el simple hecho de vencer una reserva.
+
+## 29. Estados del protocolo
+
+Implementar una máquina de estados explícita, con transiciones válidas e inválidas documentadas.
+
+Como mínimo:
+- `DRAFT`.
+- `RESERVE_PENDING`.
+- `RESERVED`.
+- `WAITING_PAYMENT`.
+- `PAYMENT_MATCHED`.
+- `CANCEL_PENDING`.
+- `CANCELLED`.
+- `EXPIRED`.
+- `COORDINATION_FAILED`.
+- `UNASSIGNED`.
+- `TRANSFER_REQUESTED`.
+- `ASSIGNED_LOCAL`.
+- `CONFLICT`.
+- `RESOLVED`.
+
+Adaptar nombres a la arquitectura existente cuando sea conveniente, sin cambiar su significado.
+
+No permitir reactivar automáticamente una reserva cancelada o vencida mediante un mensaje tardío.
+
+## 30. Flujo de reserva
+
+Cuando la cajera entra en el método de pago Nequi:
+1. Crear un ID de operación único.
+2. Guardar la solicitud en la base de datos.
+3. Enviar `RESERVE`.
+4. Incluir el importe en COP y los identificadores de operación y dispositivos.
+5. No incluir el menú ni los productos de la venta.
+6. El dispositivo receptor valida la solicitud y su estado.
+7. Si puede aceptarla, persiste la reserva y responde `ACK`.
+8. Si hay incompatibilidad, responde `BUSY`.
+9. El emisor valida la respuesta y solo habilita el flujo normal cuando la reserva sigue vigente.
+10. Si no hay respuesta válida, bloquear el flujo normal por Nequi.
+
+Una comprobación previa de conectividad no sustituye el `ACK` de una reserva específica.
+
+Si dos dispositivos solicitan reservas simultáneas incompatibles, detectar el conflicto y no elegir una tienda al azar.
+
+## 31. Cancelación de reserva
+
+Al pulsar atrás desde la pantalla de pago, mostrar:
+
+“¿Deseas cancelar esta operación?”
+
+Si la cajera confirma:
+1. Persistir `CANCEL_PENDING`.
+2. Enviar `CANCEL` con el ID original de la reserva.
+3. El receptor comprueba su estado.
+4. Si puede cancelar, persiste la cancelación y responde `CANCEL_ACK`.
+5. El emisor valida y persiste la respuesta.
+6. Solo entonces mostrar la cancelación como confirmada.
+7. Si no llega respuesta, reintentar de manera limitada y consultar `STATUS`.
+8. Mantener la operación pendiente mientras exista incertidumbre.
+
+Si ya llegó un pago, no borrarlo ni cancelarlo como si fuera una reserva. Iniciar la conciliación correspondiente.
+
+## 32. Comandos
+
+Implementar los siguientes comandos lógicos:
+
+- `HELLO`.
+- `HELLO_ACK`.
+- `RESERVE`.
+- `ACK`.
+- `BUSY`.
+- `CANCEL`.
+- `CANCEL_ACK`.
+- `CANCEL_REJECT`.
+- `PAID`.
+- `STATUS`.
+- `STATUS_REPLY`.
+- `PAYMENT_REVIEW`.
+- `ASSIGN_ACCEPT`.
+- `ASSIGN_REJECT`.
+- `RESOLVED`.
+- `HEARTBEAT`.
+
+Cada comando debe tener reglas documentadas, campos obligatorios, estados permitidos, respuestas esperadas y tratamiento de errores.
+
+Los mensajes repetidos no deben repetir sus efectos. Las respuestas deben poder recuperarse de un registro persistente.
+
+## 33. Estructura y seguridad de mensajes
+
+Cada mensaje debe incluir los campos necesarios para:
+- Versión del protocolo.
+- ID único del mensaje.
+- Comando.
+- Identidad de tienda y dispositivo de origen.
+- Identidad del destinatario.
+- ID de operación.
+- Número de secuencia.
+- Fecha y hora.
+- Vencimiento cuando corresponda.
+- Datos específicos del comando.
+- Etiqueta de autenticación criptográfica.
+
+Implementar autenticación mediante un mecanismo estándar, como HMAC-SHA-256 con clave compartida.
+
+Definir emparejamiento, almacenamiento seguro de claves, rotación y revocación.
+
+Validar identidad, autenticación, versión, secuencia, vencimiento y estado antes de ejecutar cualquier acción.
+
+No considerar el número de origen del SMS como autenticación suficiente.
+
+No guardar secretos en texto plano ni incluir claves en los mensajes.
+
+Definir el formato de transporte, codificación y límites de tamaño. Manejar correctamente los SMS duplicados, retrasados, incompletos, fuera de orden o incompatibles.
+
+No tratar un ejemplo de mensaje como formato de producción hasta implementar y probar formalmente su esquema.
+
+## 34. Reintentos y recuperación
+
+Los reintentos deben ser limitados, configurables y compatibles con el plazo de reserva.
+
+Los reintentos conservan el ID del mensaje y de la operación. No crean reservas nuevas.
+
+Persistir estados, mensajes pendientes y respuestas antes de intentar enviarlos.
+
+Al reiniciar la aplicación:
+- Recuperar las operaciones pendientes.
+- Consultar el estado remoto cuando sea necesario.
+- Reanudar únicamente las acciones permitidas.
+- No reactivar automáticamente operaciones vencidas o canceladas.
+
+Implementar recuperación para cierres forzados, pérdida de señal, falta de respuesta, SMS duplicados y discrepancias entre las bases de datos.
+
+## 35. Idempotencia
+
+Usar restricciones únicas y registros persistentes de mensajes procesados.
+
+Al recibir un mensaje:
+1. Validar su estructura.
+2. Verificar su autenticación.
+3. Buscar el ID del mensaje.
+4. Si ya fue procesado, no repetir sus efectos.
+5. Si es nuevo, validar la transición.
+6. Persistir evento, transición y respuesta de forma coherente.
+7. Enviar la respuesta después de persistir.
+
+Las notificaciones bancarias duplicadas no deben crear pagos duplicados.
+
+Usar la referencia bancaria original cuando esté disponible. No confiar únicamente en un hash del texto, porque notificaciones legítimas pueden tener contenido similar.
+
+## 36. Coincidencia de pagos
+
+Al recibir una notificación bancaria:
+1. Analizarla con el motor existente.
+2. Guardar el evento.
+3. Detectar duplicados.
+4. Buscar reservas y ventas pertinentes.
+5. Comparar el importe, la referencia, la hora, el remitente y los datos disponibles.
+6. Comprobar que no existan coincidencias incompatibles.
+7. Vincular únicamente cuando la evidencia sea suficiente.
+8. Si hay ambigüedad, usar `UNASSIGNED` o `CONFLICT`.
+
+Nunca asignar por importe solamente.
+
+Si llegan dos pagos iguales o la referencia no permite distinguirlos, no elegir automáticamente.
+
+El dispositivo autorizado por una reserva aceptada es el que puede emitir la confirmación de Ambiorix para esa operación. El otro dispositivo debe vincular el evento cuando corresponda y suprimir su propio sonido y pantalla de confirmación para evitar duplicados.
+
+## 37. Pagos sin asignar
+
+Cuando llega un pago sin una asignación segura:
+- Registrar el evento en cada dispositivo que reciba la notificación.
+- Mostrarlo como `UNASSIGNED`.
+- No emitir sonido de pago confirmado.
+- No mostrar la pantalla verde.
+- Conservar todos los datos bancarios disponibles.
+- Permitir que la cajera abra los detalles.
+
+Acciones disponibles:
+- “Pago recibido en esta tienda”.
+- “Envío a tienda equivocada”.
+
+Si se solicita transferir la asignación:
+1. Enviar `PAYMENT_REVIEW`.
+2. Incluir el identificador de la transacción y los datos disponibles.
+3. El dispositivo de destino busca un evento existente.
+4. Vincular el registro si la identidad es suficientemente sólida.
+5. Si no existe, crear un evento pendiente, sin duplicar una transacción conocida.
+6. Solicitar aceptación explícita.
+7. Procesar `ASSIGN_ACCEPT` o `ASSIGN_REJECT`.
+8. Propagar `RESOLVED`.
+9. Actualizar ambos historiales mediante eventos auditables.
+
+Si no se puede demostrar que dos registros corresponden a la misma transacción, no fusionarlos automáticamente.
+
+## 38. Conflictos
+
+Un conflicto debe ser un estado explícito, no una excepción silenciosa.
+
+Ejemplos:
+- Dos reservas incompatibles.
+- Un `ACK` tardío.
+- Una cancelación mientras llega un pago.
+- Dos pagos de igual importe con asignación ambigua.
+- Dos dispositivos con estados diferentes.
+- Un mensaje de una versión incompatible.
+- Una referencia bancaria ausente o contradictoria.
+
+En un conflicto:
+- Conservar los eventos originales.
+- No duplicar pagos.
+- No emitir confirmaciones verdes.
+- No borrar registros.
+- Bloquear nuevas operaciones incompatibles.
+- Consultar el estado remoto cuando corresponda.
+- Solicitar intervención autorizada cuando la automatización no pueda resolverlo de forma segura.
+
+## 39. Auditoría del protocolo
+
+Registrar:
+- ID del evento.
+- ID de operación.
+- Estado anterior y nuevo.
+- Tienda y dispositivo.
+- Fecha y hora.
+- Comando relacionado.
+- Resultado de validación.
+- Motivo de error o conflicto.
+- Usuario que ejecutó acciones manuales.
+- Referencia de eventos relacionados.
+
+No permitir borrar o editar transacciones históricas desde la interfaz.
+
+Las correcciones deben registrarse como eventos nuevos vinculados a los originales.
+
+## 40. Diagnóstico para el propietario
+
+Crear una pantalla protegida para consultar:
+- Identidad de cada dispositivo.
+- Última comunicación confirmada.
+- Versión del protocolo.
+- Reservas pendientes.
+- Reservas vigentes.
+- Reservas vencidas.
+- Cancelaciones pendientes.
+- Mensajes fallidos.
+- Operaciones sin asignar.
+- Conflictos.
+- Estado del emparejamiento.
+- Problemas de autenticación.
+
+No mostrar claves criptográficas.
+
+No presentar una comunicación reciente como garantía de disponibilidad futura.
+
+---
+
+# PARTE IX. PERSISTENCIA Y CONSISTENCIA
+
+## 41. Integridad de los datos
+
+Definir modelos y relaciones para:
+- Usuarios.
+- Tiendas.
+- Dispositivos.
+- Productos.
+- Categorías.
+- Variantes.
+- Recetas.
+- Ingredientes.
+- Lotes.
+- Movimientos de inventario.
+- Compras.
+- Proveedores.
+- Ventas.
+- Detalles de venta.
+- Pagos.
+- Eventos bancarios.
+- Reservas.
+- Mensajes SMS del protocolo.
+- Cajas.
+- Turnos.
+- Movimientos de caja.
+- Gastos.
+- Auditoría.
+
+Utilizar identificadores únicos y relaciones consistentes.
+
+Las ventas históricas deben conservar los datos necesarios para reproducir sus importes y entender los movimientos de inventario asociados.
+
+No utilizar nombres de productos o importes como claves únicas.
+
+Implementar migraciones de base de datos seguras. Una actualización de la aplicación no debe borrar los registros existentes.
+
+## 42. Transacciones y fallos parciales
+
+Las operaciones que afectan varias tablas relacionadas deben ejecutarse de manera transaccional.
+
+Ejemplos:
+- Registrar una venta y sus detalles.
+- Registrar un pago.
+- Descontar ingredientes.
+- Registrar una compra y aumentar existencias.
+- Cerrar caja.
+- Aceptar una reserva.
+- Procesar una cancelación.
+- Registrar un evento bancario y su estado de conciliación.
+
+Si una operación falla a mitad de camino, la base de datos debe quedar en un estado coherente.
+
+Para los SMS, utilizar un patrón persistente de mensajes pendientes de envío: guardar primero la operación y el comando, y después enviar el SMS. Si el envío falla, mantener la solicitud pendiente para recuperación.
+
+No prometer que una transacción de SQLite puede incluir atómicamente la entrega de un SMS por la red. Diseñar explícitamente la recuperación de ese fallo parcial.
+
+## 43. Respaldo y restauración
+
+Implementar una función de respaldo local y exportación de los datos relevantes.
+
+El respaldo debe incluir los registros necesarios para restaurar:
+- Catálogo.
+- Recetas.
+- Inventario y movimientos.
+- Ventas.
+- Pagos.
+- Cajas y turnos.
+- Configuración.
+- Auditoría necesaria.
+
+Proteger los archivos de respaldo y documentar la restauración.
+
+No sobrescribir datos actuales silenciosamente al importar un respaldo.
+
+Evitar que restaurar una copia antigua provoque la reutilización de identificadores de operaciones o la repetición de comandos pendientes.
+
+La restauración debe comprobar la integridad y advertir que una copia local antigua puede estar desactualizada respecto al otro teléfono.
+
+No sincronizar automáticamente las bases de datos completas por SMS.
+
+---
+
+# PARTE X. PRUEBAS Y CRITERIOS DE ACEPTACIÓN
+
+## 44. Pruebas funcionales del POS
+
+Probar:
+- Inicio de sesión y permisos.
+- Creación y edición de productos.
+- Variantes y precios.
+- Carrito y cálculo de totales.
+- Pagos en efectivo.
+- Pagos por Nequi.
+- Pagos divididos.
+- Inventario y recetas.
+- Conversiones de unidades.
+- Compras y proveedores.
+- Lotes y vencimientos.
+- Mermas.
+- Apertura y cierre de caja.
+- Gastos.
+- Historial.
+- Reportes.
+- Respaldo y restauración.
+- Persistencia tras reinicio.
+- Restricciones de acceso a costos y ganancias.
+
+## 45. Pruebas de coordinación entre teléfonos
+
+Crear pruebas automatizadas y pruebas con dos dispositivos Android reales.
+
+Probar:
+1. Reserva aceptada normalmente.
+2. Reserva sin respuesta.
+3. `ACK` tardío.
+4. `RESERVE` duplicado.
+5. Dos reservas simultáneas.
+6. `BUSY`.
+7. Cancelación confirmada.
+8. Cancelación sin respuesta.
+9. Pago recibido durante una cancelación.
+10. Notificación bancaria durante una reserva.
+11. Pago de importe diferente.
+12. Dos pagos de igual importe.
+13. Notificaciones bancarias duplicadas.
+14. Pago sin reserva.
+15. Reasignación aceptada.
+16. Reasignación rechazada.
+17. Reinicio de un dispositivo.
+18. Pérdida y recuperación de señal.
+19. Mensajes fuera de orden.
+20. Mensajes con autenticación inválida.
+21. Mensajes caducados.
+22. Versiones incompatibles.
+23. Fallos parciales entre persistencia y envío.
+24. Recuperación después de cierre forzado.
+
+## 46. Criterios de aceptación
+
+La implementación no se considera terminada solo porque la interfaz compile o los SMS se envíen.
+
+Debe demostrar que:
+- Los datos persisten.
+- Los permisos se aplican en la lógica de negocio.
+- La recepción bancaria no se bloquea por las reservas.
+- Los mensajes repetidos no duplican operaciones.
+- Las reservas no se aceptan sin confirmación válida.
+- Los pagos ambiguos no se asignan arbitrariamente.
+- Las cancelaciones no borran pagos recibidos.
+- Los conflictos son visibles.
+- Los registros históricos se conservan.
+- La aplicación recupera estados después de reinicios.
+- Ambos dispositivos pueden reconciliar operaciones conocidas.
+- Las limitaciones del transporte SMS están documentadas.
+
+No afirmar que se garantiza ausencia absoluta de errores. El objetivo es detectar errores, impedir confirmaciones falsas y mantener la información íntegra ante fallos previsibles.
+
+---
+
+# PARTE XI. ENTREGA DEL PROYECTO
+
+## 47. Forma de trabajo
+
+Trabaja de manera incremental.
+
+Primero, entrega:
+1. Análisis del proyecto existente.
+2. Arquitectura actual.
+3. Funcionalidades existentes que se conservarán.
+4. Componentes que deben añadirse o modificarse.
+5. Esquema de datos propuesto.
+6. Máquina de estados del protocolo.
+7. Plan de pruebas.
+
+Después, implementa cada módulo y prueba sus cambios.
+
+No reemplaces el proyecto por una aplicación ficticia ni generes archivos que no estén integrados.
+
+## 48. Entregables
+
+Entregar:
+- Código fuente completo y compilable.
+- Proyecto Android con sus dependencias.
+- Migraciones de base de datos.
+- Pruebas automatizadas.
+- Documentación técnica.
+- Instrucciones para configurar ambos teléfonos.
+- Procedimiento de emparejamiento.
+- Procedimiento de respaldo y restauración.
+- Matriz de pruebas manuales.
+- Lista de permisos Android requeridos.
+- Lista de limitaciones de SMS y ejecución en segundo plano.
+- Instrucciones para compilar e instalar el APK.
+- Registro de cambios y funcionalidades verificadas.
+
+Si alguna función no puede implementarse debido a restricciones técnicas o falta de información, documentarla expresamente y no simular que funciona.
+
+## 49. Prioridad final
+
+Las prioridades, en orden, son:
+
+1. Preservar los datos y las funcionalidades existentes de Ambiorix Pay.
+2. Garantizar la integridad local de ventas, pagos, caja e inventario.
+3. Mantener independiente y persistente la recepción de notificaciones bancarias.
+4. Coordinar las reservas entre los dos dispositivos.
+5. Evitar pagos duplicados y asignaciones ambiguas.
+6. Detectar y resolver conflictos.
+7. Aplicar correctamente roles y permisos.
+8. Proporcionar reportes fiables.
+9. Mantener una interfaz rápida y sencilla.
+10. Preparar una arquitectura extensible para funciones futuras sin introducir servicios remotos en esta versión.
+
+**Inicia inspeccionando el proyecto real y presentando un plan técnico. No empieces reemplazando archivos completos sin verificar primero qué existe y qué debe conservarse.**

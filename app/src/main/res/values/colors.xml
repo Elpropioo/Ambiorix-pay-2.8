@@ -1,0 +1,8 @@
+<resources>
+    <color name="gold_primary">#F59E0B</color>
+    <color name="gold_variant">#D97706</color>
+    <color name="dark_background">#0B0F17</color>
+    <color name="dark_surface">#161E2E</color>
+    <color name="success_green">#10B981</color>
+    <color name="success_green_dark">#059669</color>
+</resources>

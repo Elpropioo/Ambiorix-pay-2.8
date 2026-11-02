@@ -1,0 +1,54 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="260dp"
+    android:height="85dp"
+    android:viewportWidth="520"
+    android:viewportHeight="170">
+    <!-- Trazo caligráfico principal "A" de Ambiorix -->
+    <path
+        android:pathData="M 52,146 C 86,105 138,42 168,24 C 176,19 181,23 177,34 C 169,58 152,96 146,116 C 143,125 147,127 155,118"
+        android:strokeWidth="4.2"
+        android:strokeColor="#F1F5F9"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <!-- Barra transversal de la "A" -->
+    <path
+        android:pathData="M 42,96 C 78,92 126,90 166,92"
+        android:strokeWidth="3.4"
+        android:strokeColor="#F1F5F9"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <!-- Continuación cursiva "mbiorix" -->
+    <path
+        android:pathData="M 155,118 C 165,104 176,92 182,94 C 187,96 182,112 179,118 C 187,103 198,92 204,94 C 209,96 204,112 202,117 C 210,103 221,93 227,95 C 232,97 228,114 234,117 C 242,120 255,106 268,82 C 279,62 292,40 298,33 C 302,29 296,26 289,34 C 277,48 259,84 255,108 C 252,121 260,124 269,116 C 276,110 279,101 273,98 C 268,96 264,103 271,108 C 279,113 291,105 298,96 C 294,106 293,116 299,118 C 306,120 316,108 323,98 C 319,108 321,118 329,119 C 338,120 347,109 349,100 C 350,93 343,91 337,96 C 331,101 329,112 336,116 C 344,120 355,109 364,96 C 370,88 377,93 374,102 C 371,111 372,118 379,118 C 387,118 396,107 403,97 C 399,107 399,116 406,118 C 414,120 425,109 435,96"
+        android:strokeWidth="3.5"
+        android:strokeColor="#E2E8F0"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <!-- Trazo final de la "x" -->
+    <path
+        android:pathData="M 426,93 C 436,103 446,114 458,119 C 468,123 482,116 492,106"
+        android:strokeWidth="3.3"
+        android:strokeColor="#F59E0B"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M 454,92 C 440,104 427,115 417,123"
+        android:strokeWidth="3.1"
+        android:strokeColor="#E2E8F0"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <!-- Puntos de las dos "i" -->
+    <path
+        android:fillColor="#F8FAFC"
+        android:pathData="M 305,76.4 A 2.6,2.6 0 1,1 304.9,76.4 Z" />
+    <path
+        android:fillColor="#F8FAFC"
+        android:pathData="M 408,76.4 A 2.6,2.6 0 1,1 407.9,76.4 Z" />
+    <!-- Rúbrica inferior -->
+    <path
+        android:pathData="M 118,138 C 205,131 325,129 468,134"
+        android:strokeWidth="1.6"
+        android:strokeAlpha="0.55"
+        android:strokeColor="#F59E0B"
+        android:strokeLineCap="round" />
+</vector>
